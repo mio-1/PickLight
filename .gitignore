@@ -1,0 +1,93 @@
+# Python environments, bytecode and package metadata
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# Build outputs and downloaded dependencies (recreated by build scripts)
+/build/
+/dist/
+/vendor/
+/.downloads/
+*.spec
+*.whl
+*.exe
+*.dll
+*.pyd
+*.msi
+*.msix
+
+# Tool caches and test reports
+.pip-cache/
+.npm-cache/
+node_modules/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+junit.xml
+
+# Local settings, QA artifacts and photo collections; keep test fixtures/assets
+/.test-settings.json
+/settings.json
+/settings.local.json
+/*-qa-settings.json
+/.qa/
+/review/
+/photos/
+/test-photos/
+/.picklight/
+
+# Private themes must stay outside the public repository
+/private-themes/
+/assets/themes/eagle/
+/assets/themes/local-*/
+
+# Local agent instructions and handoff notes belong in ../agent/
+/agent/
+AGENTS*.md
+NEXT_SESSION_PROMPT.md
+CLAUDE.md
+GEMINI.md
+.agents/
+.codex/
+.claude/
+.cursor/
+.opencode/
+
+# Machine-specific editor configuration
+.idea/
+.vscode/
+.vs/
+*.code-workspace
+
+# Local credentials; sanitized example environment files may be committed
+.env
+.env.*
+!.env.example
+!.env.sample
+.aws/
+.ssh/
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Logs, temporary files and OS metadata
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini

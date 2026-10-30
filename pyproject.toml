@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=70", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "picklight"
+version = "0.1.0"
+description = "A focused Windows photo culling app for paired JPEG and RAW files"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {file = "LICENSE"}
+authors = [{name = "Yang Mu"}]
+dependencies = [
+  "PySide6-Essentials>=6.8,<7",
+  "rawpy>=0.27.1,<1",
+]
+
+[project.scripts]
+picklight = "picklight.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
