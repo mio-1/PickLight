@@ -25,6 +25,9 @@ $executable = Join-Path $package 'PickLight.exe'
 if (-not (Test-Path -LiteralPath $executable)) {
     throw "Build PickLight first: $executable"
 }
+if (-not (Test-Path -LiteralPath (Join-Path $package 'PickLightUpdater.exe'))) {
+    throw 'The standalone updater is missing. Rebuild PickLight before packaging.'
+}
 
 $release = Join-Path $project 'dist\Release'
 New-Item -ItemType Directory -Path $release -Force | Out-Null

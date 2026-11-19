@@ -53,6 +53,7 @@ class MultiSelectionMixin:
         if self._building_list or not hasattr(self, "multi_inspector"):
             return
         self._update_rating_actions()
+        self._update_organization_selection()
         pairs = self._selected_photo_pairs()
         self.multi_preview.set_paths([str(self._filtered_display_path(pair)) for pair in pairs],
                                      incoming=self.filmstrip.stack_addition)

@@ -18,6 +18,7 @@ from picklight.appearance import configure_appearance, sidebar_counts, ui_color
 from picklight.preferences import Preferences, configure_startup_scale, save_preferences
 from picklight.preferences_dialog import PreferencesDialog
 from picklight.session import SessionStore
+from picklight.ui.toolbar import FolderSwitchPanel
 from picklight.window import MainWindow
 
 
@@ -41,7 +42,8 @@ class PreferenceDataTests(unittest.TestCase):
     def test_save_preserves_unrelated_and_future_data_and_rolls_back_os_on_failure(self):
         with tempfile.TemporaryDirectory() as directory:
             store = SessionStore(Path(directory) / "settings.json")
-            store.data.update({"photo_decisions": {"real.jpg": "keep"}, "preferences": {"future": 7}})
+            store.data.update({"photo_decisions": {"real.jpg": "keep"},
+                               "preferences": {"future": 7, "notify_screenshot_sound": True}})
             store.save()
             login = Mock()
             login.read.return_value = '"old PickLight.exe"'
@@ -49,6 +51,7 @@ class PreferenceDataTests(unittest.TestCase):
             save_preferences(store, preferences, login=login)
             login.set_enabled.assert_called_once_with(True)
             self.assertEqual(store.data["preferences"]["future"], 7)
+            self.assertNotIn("notify_screenshot_sound", store.data["preferences"])
             self.assertEqual(SessionStore(store.path).data["photo_decisions"], {"real.jpg": "keep"})
             old_data = json.loads(store.path.read_text(encoding="utf8"))
             with patch.object(store, "save", side_effect=OSError("read only")):
@@ -108,6 +111,44 @@ class PreferencesDialogTests(unittest.TestCase):
         self.assertFalse(dialog.general_button.property("selected"))
         self.assertTrue(dialog.appearance_card.isHidden())
         self.assertFalse(dialog.startup_card.isHidden())
+
+    def test_import_and_notification_pages_use_eagle_style_master_switch_cards(self):
+        dialog = self.make_dialog()
+        dialog._select_page("auto_import")
+        self.assertEqual(dialog.auto_import_enabled.accessibleName(), "启用自动导入")
+        self.assertEqual(dialog.auto_import_enabled.size().width(), 40)
+        dialog.auto_import_enabled.setChecked(True)
+        dialog._select_page("notification")
+        self.assertTrue(any(label.text() == "启用通知音效" for label in dialog.findChildren(QLabel)))
+        self.assertTrue(dialog.notify_folder_delete_sound.isChecked())
+        dialog.notification_sounds_enabled.setChecked(False)
+        self.assertFalse(dialog.notify_folder_delete_sound.isEnabled())
+        self.assertTrue(dialog.notify_auto_import.isEnabled())
+        dialog.notification_popups_enabled.setChecked(False)
+        self.assertFalse(dialog.notify_auto_import.isEnabled())
+        self.assertFalse(any(label.text() in ("屏幕截图", "扩展添加图片", "删除项目")
+                             for label in dialog.findChildren(QLabel)))
+        dialog._select_page("operation")
+        dialog.preview_wheel_radios["navigate"].setChecked(True)
+        dialog.hover_zoom_disabled_radio.setChecked(True)
+        dialog.middle_click_radios["system"].setChecked(True)
+        dialog.space_key_radios["scroll"].setChecked(True)
+        dialog.double_click_default_radio.setChecked(True)
+        dialog._select_page("sidebar")
+        self.assertTrue(dialog.sidebar_double_click_toggle.isChecked())
+        dialog.sidebar_double_click_rename.setChecked(True)
+        self.assertTrue(dialog._apply(close=False))
+        self.assertTrue(self.window.preferences.auto_import_enabled)
+        self.assertFalse(self.window.preferences.notification_popups_enabled)
+        self.assertFalse(self.window.preferences.notification_sounds_enabled)
+        self.assertTrue(self.window.preferences.notify_folder_delete_sound)
+        self.assertEqual(self.window.preferences.preview_wheel_action, "navigate")
+        self.assertFalse(self.window.preferences.hover_zoom_enabled)
+        self.assertFalse(self.window.filmstrip.hover_zoom_enabled)
+        self.assertEqual(self.window.preferences.middle_click_action, "system")
+        self.assertEqual(self.window.preferences.space_key_action, "scroll")
+        self.assertFalse(self.window.preferences.double_click_preview)
+        self.assertEqual(self.window.preferences.sidebar_double_click_action, "rename")
         dialog.search.setText("不存在的项目")
         self.assertTrue(dialog.empty.isVisible())
         dialog.general_button.click()
@@ -115,6 +156,93 @@ class PreferencesDialogTests(unittest.TestCase):
         self.assertTrue(dialog.general_button.property("selected"))
         self.assertFalse(dialog.appearance_card.isHidden())
         self.assertFalse(dialog.startup_card.isHidden())
+
+    def test_preview_settings_page_is_removed_and_grayscale_survives_apply(self):
+        self.window._set_grayscale_preview(True)
+        dialog = self.make_dialog()
+        self.assertNotIn("preview", dialog.extra_pages)
+        self.assertNotIn("preview", dialog.extra_buttons)
+        self.assertFalse(any(label.text() == "预览设置" for label in dialog.findChildren(QLabel)))
+        dialog._select_page("operation")
+        self.assertTrue(dialog._apply(close=False))
+        self.assertTrue(self.window.preferences.preview_grayscale)
+        self.assertTrue(self.window.grayscale_preview)
+
+    def test_preferences_search_has_trailing_clear_action(self):
+        dialog = self.make_dialog()
+        self.assertFalse(dialog.search.clear_action.isVisible())
+        dialog.search.setText("左栏")
+        self.assertTrue(dialog.search.clear_action.isVisible())
+        dialog.search.clear_action.trigger()
+        self.assertEqual(dialog.search.text(), "")
+        self.assertFalse(dialog.search.clear_action.isVisible())
+        dialog._select_page("shortcuts")
+        dialog.shortcut_page.search.setText("RAW")
+        self.assertTrue(dialog.shortcut_page.search.clear_action.isVisible())
+        dialog.shortcut_page.search.clear_action.trigger()
+        self.assertEqual(dialog.shortcut_page.search.text(), "")
+
+    def test_folder_switch_search_has_trailing_clear_action(self):
+        panel = FolderSwitchPanel(self.window)
+        self.addCleanup(panel.deleteLater)
+        self.assertFalse(panel.search_clear_action.isVisible())
+        panel.search.setText("RAW")
+        self.assertTrue(panel.search_clear_action.isVisible())
+        panel.search_clear_action.trigger()
+        self.assertEqual(panel.search.text(), "")
+        self.assertFalse(panel.search_clear_action.isVisible())
+
+    def test_sidebar_and_operation_options_share_eagle_column_positions(self):
+        dialog = self.make_dialog()
+        dialog.resize(838, 648)
+        dialog._select_page("sidebar")
+        self.app.processEvents()
+        x = lambda widget: widget.mapTo(dialog, QPoint()).x()
+        self.assertEqual(x(dialog.sidebar_double_click_rename), x(dialog.show_quick_access))
+        self.assertAlmostEqual(x(dialog.sidebar_double_click_toggle) - x(dialog.show_quick_access), 178, delta=2)
+        self.assertEqual(x(dialog.sidebar_double_click_toggle), x(dialog.show_folders))
+        self.assertAlmostEqual(x(dialog.show_folders) - x(dialog.show_quick_access), 178, delta=2)
+        dialog._select_page("operation")
+        self.app.processEvents()
+        self.assertEqual(x(dialog.preview_wheel_radios["pan"]), x(dialog.double_click_preview_radio))
+        self.assertEqual(x(dialog.preview_wheel_radios["zoom"]), x(dialog.ctrl_wheel_zoom))
+        self.assertEqual(x(dialog.preview_wheel_radios["navigate"]), x(dialog.double_click_default_radio))
+        self.assertEqual(x(dialog.hover_zoom_enabled_radio), x(dialog.preview_wheel_radios["pan"]))
+        self.assertEqual(x(dialog.middle_click_radios["system"]), x(dialog.preview_wheel_radios["navigate"]))
+        self.assertEqual(x(dialog.space_key_radios["preview"]), x(dialog.preview_wheel_radios["pan"]))
+        self.assertAlmostEqual(x(dialog.preview_wheel_radios["navigate"]) -
+                               x(dialog.preview_wheel_radios["pan"]), 172, delta=2)
+
+    def test_space_key_scrolls_gallery_without_switching_view(self):
+        from unittest.mock import patch
+        self.window.preferences = replace(self.window.preferences, space_key_action="scroll")
+        self.window.center_stack.setCurrentIndex(0)
+        bar = self.window.filmstrip.verticalScrollBar()
+        with (patch.object(self.window, "_toggle_view") as toggle,
+              patch.object(bar, "maximum", return_value=1000),
+              patch.object(bar, "pageStep", return_value=200),
+              patch.object(bar, "value", return_value=0),
+              patch.object(bar, "setValue") as scroll):
+            self.window._space_key_action()
+            toggle.assert_not_called()
+            scroll.assert_called_once_with(200)
+
+    def test_middle_click_uses_selected_action(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        path = self.root / "photo.jpg"
+        self.window.visible = [SimpleNamespace(display_path=path)]
+        self.window.filmstrip.addItem("photo")
+        item = self.window.filmstrip.item(0)
+        self.window.preferences = replace(self.window.preferences, middle_click_action="system")
+        with patch("picklight.photos.QDesktopServices.openUrl") as open_url:
+            self.window._photo_middle_clicked(item)
+            open_url.assert_not_called()
+        self.window.preferences = replace(self.window.preferences, middle_click_action="new_window")
+        with patch("picklight.ui.detached_preview.DetachedPreview") as preview:
+            self.window._photo_middle_clicked(item)
+            preview.assert_called_once()
+            preview.return_value.show.assert_called_once()
 
     def test_close_reverts_theme_preview_and_discards_unapplied_settings(self):
         dialog = self.make_dialog()

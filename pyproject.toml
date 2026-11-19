@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "picklight"
-version = "0.1.0"
+version = "0.1.1"
 description = "A focused Windows photo culling app for paired JPEG and RAW files"
 readme = "README.md"
 requires-python = ">=3.11"

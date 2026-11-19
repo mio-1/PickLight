@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1] / "assets/themes/github"
 SOURCES = Path(__file__).resolve().parent / "theme_sources/octicons"
 
 ICONS = {
-    "photo.menu.explorer": "file-directory", "photo.menu.location": "search",
+    "photo.menu.explorer": "file-directory", "photo.menu.cover": "image", "photo.menu.grayscale": "image", "photo.menu.location": "search",
     "photo.menu.rename": "pencil", "photo.menu.copy_path": "file-code", "photo.menu.delete": "trash",
     "preferences.general": "gear", "preferences.dropdown": "chevron-down", "import.cancel": "x",
     "app.menu": "three-bars", "check": "check", "filter.check": "check",
@@ -41,7 +41,7 @@ ICONS = {
     "search.scope.description": "note", "search.scope.extension": "file-code",
     "sidebar.all": "inbox", "toggle.sidebar": "sidebar-collapse",
     "toolbar.back": "chevron-left", "toolbar.forward": "chevron-right",
-    "toolbar.layout": "rows", "toolbar.zoom.in": "plus", "toolbar.zoom.out": "dash",
+    "toolbar.layout": "rows", "toolbar.folder.switch": "arrow-switch", "toolbar.zoom.in": "plus", "toolbar.zoom.out": "dash",
     "tree.arrow": "triangle-right", "rating.on": "star-fill", "rating.off": "star",
     "filter.star": "star-fill",
 }
@@ -141,7 +141,10 @@ def main():
         (ROOT / relative).write_text(inset_icon(icon(source), 1), encoding="utf-8")
         assets["folder.icon." + name] = relative
     for key, name in {"sidebar.all": "sidebar-repository", "toolbar.layout": "layout-table",
-                      "layout.grid": "layout-grid", "layout.waterfall": "layout-waterfall"}.items():
+                      "layout.grid": "layout-grid", "layout.waterfall": "layout-waterfall",
+                      "toolbar.more": "toolbar-more", "toolbar.thumbnails": "toolbar-thumbnails",
+                      "toolbar.compare": "toolbar-compare", "loupe.fit_canvas": "loupe-fit-canvas",
+                      "sidebar.add_folder": "sidebar-add_folder"}.items():
         relative = f'icons/{key.replace(".", "-")}.svg'
         (ROOT / relative).write_bytes((SOURCES.parent / "picklight" / (name + ".svg")).read_bytes())
         assets[key] = relative

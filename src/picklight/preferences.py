@@ -10,11 +10,16 @@ import sys
 from picklight.session import default_settings_path
 
 
-APPEARANCES = (("auto", "跟随系统", "#ffffff"), ("light", "浅色", "#f5f5f5"),
-               ("lightgray", "浅灰", "#b8b8bb"), ("gray", "深灰", "#494a4e"),
-               ("dark", "深色", "#18191c"), ("blue", "深蓝", "#303342"),
-               ("purple", "深紫", "#343141"))
+APPEARANCES = (("auto", "跟随系统", "#ffffff"), ("light", "浅色", "#f3f4f6"),
+               ("lightgray", "浅灰", "#e3e4e6"), ("gray", "深灰", "#37383c"),
+               ("dark", "深色", "#18191c"), ("blue", "深蓝", "#0d1630"),
+               ("purple", "深紫", "#1c1424"))
 SCALES = (50, 75, 80, 90, 100, 110, 125, 150, 175, 200)
+RETIRED_NOTIFICATION_FIELDS = frozenset({
+    "notify_project_delete_sound",
+    "notify_screenshot_sound", "notify_extended_import_sound", "notify_screenshot_popup",
+    "notify_collection_popup", "notify_duplicate_popup",
+})
 
 
 @dataclass(frozen=True)
@@ -26,6 +31,23 @@ class Preferences:
     sidebar_counts: bool = True
     launch_at_login: bool = False
     gpu: bool = True
+    sidebar_quick_access: bool = True
+    sidebar_folders: bool = True
+    sidebar_double_click_action: str = "toggle"
+    double_click_preview: bool = True
+    ctrl_wheel_zoom: bool = True
+    preview_wheel_action: str = "zoom"
+    hover_zoom_enabled: bool = False
+    middle_click_action: str = "new_window"
+    space_key_action: str = "preview"
+    remember_preview_zoom: bool = False
+    preview_grayscale: bool = False
+    notify_auto_import: bool = True
+    notification_popups_enabled: bool = True
+    notification_sounds_enabled: bool = True
+    notify_folder_delete_sound: bool = True
+    auto_import_enabled: bool = False
+    auto_import_path: str = ""
 
     @classmethod
     def from_data(cls, data):
@@ -39,6 +61,14 @@ class Preferences:
             values["appearance"] = defaults["appearance"]
         if values["scale"] not in SCALES:
             values["scale"] = 100
+        if values["sidebar_double_click_action"] not in {"rename", "toggle"}:
+            values["sidebar_double_click_action"] = defaults["sidebar_double_click_action"]
+        if values["preview_wheel_action"] not in {"pan", "navigate", "zoom"}:
+            values["preview_wheel_action"] = defaults["preview_wheel_action"]
+        if values["middle_click_action"] not in {"new_window", "system"}:
+            values["middle_click_action"] = defaults["middle_click_action"]
+        if values["space_key_action"] not in {"preview", "scroll"}:
+            values["space_key_action"] = defaults["space_key_action"]
         values["language"] = "zh_CN"  # Only advertise translations that actually exist.
         return cls(**values)
 
@@ -129,7 +159,9 @@ def save_preferences(store, preferences, *, login=None, shortcuts=None):
     if changed_login:
         login.set_enabled(preferences.launch_at_login)
     # Preserve unrecognized future preference fields too.
-    store.data["preferences"] = {**(previous if isinstance(previous, dict) else {}), **asdict(preferences)}
+    retained = {key: value for key, value in (previous.items() if isinstance(previous, dict) else ())
+                if key not in RETIRED_NOTIFICATION_FIELDS}
+    store.data["preferences"] = {**retained, **asdict(preferences)}
     if shortcuts is not None:
         stored = dict(previous_shortcuts) if isinstance(previous_shortcuts, dict) else {}
         for key, value in shortcuts.items():

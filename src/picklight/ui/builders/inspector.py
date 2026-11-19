@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from PySide6.QtGui import QColor, QPalette
+
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -34,6 +36,13 @@ from picklight.ui.inspector import (
 )
 
 
+def _set_section_body_visible(body, visible):
+    # QScrollArea already relayouts its resizable widget when a child changes
+    # visibility. Disabling/re-enabling viewport updates forces a full repaint
+    # and makes repeated section clicks flash the entire inspector.
+    body.setVisible(visible)
+
+
 def build_inspector(self):
     inspector = QFrame(objectName="inspector")
     self.inspector = inspector
@@ -43,9 +52,21 @@ def build_inspector(self):
     inspector_layout.setContentsMargins(0, 0, WINDOW_RESIZE_BORDER, 0)
     inspector_layout.setSpacing(0)
     self.inspector_scroll = QScrollArea()
+    self.inspector_scroll.setObjectName("inspectorScroll")
     self.inspector_scroll.setWidgetResizable(True)
     self.inspector_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    # Reserve the same viewport width when collapsing crosses the scroll
+    # threshold. Otherwise the bar appears/disappears between rapid clicks and
+    # the entire inspector, including its preview, repaints at a new width.
+    self.inspector_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+    viewport = self.inspector_scroll.viewport()
+    viewport.setAutoFillBackground(True)
+    palette = viewport.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor("#1f2023"))
+    viewport.setPalette(palette)
     info_content = QWidget(objectName="inspectorContent")
+    info_content.setAutoFillBackground(True)
+    info_content.setPalette(palette)
     info = QVBoxLayout(info_content)
     info.setContentsMargins(16, 6, 16, 22)
     info.setSpacing(0)
@@ -72,7 +93,9 @@ def build_inspector(self):
     self.preview_expand_button.setIconSize(QSize(16, 16))
     self.preview_expand_button.setFixedSize(22, 22)
     self.preview_expand_button.setEnabled(False)
-    self.preview_expand_button.setAccessibleName("大图模式（尚未开放）")
+    self.preview_expand_button.setToolTip("全屏浏览")
+    self.preview_expand_button.setAccessibleName("进入全屏浏览")
+    self.preview_expand_button.clicked.connect(self._enter_large_screen)
     preview_controls_layout.addWidget(self.preview_expand_button)
     info.addWidget(self.preview_controls)
     info.addSpacing(7)
@@ -106,7 +129,8 @@ def build_inspector(self):
         rows.setContentsMargins(0, 2, 0, 0)
         rows.setSpacing(0)
         info.addWidget(body)
-        header.toggled.connect(body.setVisible)
+        header.toggled.connect(lambda visible, section=body:
+                               _set_section_body_visible(section, visible))
         self.inspector_sections[title] = header
         info.addSpacing(17)
         return rows
@@ -232,7 +256,8 @@ def build_inspector(self):
     folder_rows_layout = QVBoxLayout(folder_rows)
     folder_rows_layout.setContentsMargins(0, 4, 0, 0)
     folder_rows_layout.setSpacing(0)
-    self.folder_inspector_section.toggled.connect(folder_rows.setVisible)
+    self.folder_inspector_section.toggled.connect(
+        lambda visible: _set_section_body_visible(folder_rows, visible))
     folder_info.addWidget(folder_rows)
     self.folder_inspector_count = label("0", "detailValue")
     self.folder_inspector_size = label("0.00 bytes", "detailValue")
@@ -319,7 +344,8 @@ def build_inspector(self):
     multi_rows = QVBoxLayout(self.multi_info_body)
     multi_rows.setContentsMargins(0, 2, 0, 0)
     multi_rows.setSpacing(0)
-    self.multi_info_heading.toggled.connect(self.multi_info_body.setVisible)
+    self.multi_info_heading.toggled.connect(
+        lambda visible: _set_section_body_visible(self.multi_info_body, visible))
     multi.addWidget(self.multi_info_body)
     self.multi_selection_stars = StarRatingControl()
     self.multi_selection_stars.muted = True

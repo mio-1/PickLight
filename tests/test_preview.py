@@ -1,6 +1,7 @@
 """RAW preview orientation matches the camera metadata without double rotation."""
 
 import unittest
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -10,7 +11,9 @@ import rawpy
 from PySide6.QtCore import QBuffer, QByteArray, QIODevice
 from PySide6.QtGui import QColor, QImage
 
-from picklight.preview import _exiftool_raw_image, _orient_raw_thumbnail, _raw_image
+from picklight.preview import (_cached_raw_preview, _exiftool_raw_image,
+                               _orient_raw_thumbnail, _raw_image, _read_embedded_jpeg,
+                               _raw_preview_cache)
 from picklight.metadata import MetadataError
 
 
@@ -24,6 +27,26 @@ class RawPreviewTests(unittest.TestCase):
         buffer.open(QIODevice.OpenModeFlag.WriteOnly)
         image.save(buffer, 'JPEG')
         return bytes(data)
+
+    def test_embedded_jpeg_is_scaled_during_decode(self):
+        image = _read_embedded_jpeg(self.jpeg(), 4)
+        self.assertEqual((image.width(), image.height()), (4, 2))
+
+    def test_raw_preview_cache_reuses_sufficient_size_but_upgrades_for_hero(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "camera.ARW"
+            path.write_bytes(b"raw fixture")
+            source = QImage(800, 400, QImage.Format.Format_RGB32)
+            source.fill(QColor("red"))
+            _raw_preview_cache.clear()
+            with patch("picklight.preview._raw_image", return_value=source) as decode_raw:
+                thumb = _cached_raw_preview(path, 420)
+                same_thumb = _cached_raw_preview(path, 420)
+                self.assertEqual((thumb.width(), thumb.height()), (420, 210))
+                self.assertEqual((same_thumb.width(), same_thumb.height()), (420, 210))
+                hero = _cached_raw_preview(path, 2200)
+                self.assertEqual((hero.width(), hero.height()), (800, 400))
+                self.assertEqual(decode_raw.call_count, 2)
 
     def test_unsupported_camera_uses_embedded_preview_without_raw_processing(self):
         with patch('picklight.preview.rawpy.imread', side_effect=rawpy.LibRawFileUnsupportedError()), \

@@ -1,6 +1,7 @@
 """Photo context menu and asynchronous source-file commands."""
 
 from pathlib import Path
+from dataclasses import replace
 import subprocess
 
 from PySide6.QtCore import Qt
@@ -21,9 +22,11 @@ class PhotoFileLoader(TaskLoader):
     def load(self, operation, files, stem=""):
         def work():
             try:
-                renamed = rename_files(files, stem) if operation == "rename" else {}
-                errors = recycle_files(files) if operation == "delete" else []
-                return files, renamed, errors
+                if operation == "rename":
+                    return files, rename_files(files, stem), []
+                if operation == "delete":
+                    return files, {}, recycle_files(files)
+                raise ValueError(f"不支持的文件操作：{operation}")
             except Exception as error:
                 return files, {}, [str(error)]
 
@@ -76,12 +79,62 @@ class PhotoMenuMixin:
         location.setEnabled(bool(locations))
         menu.addSeparator()
         rename = add("重命名", "rename", lambda: self._rename_photo_group(pairs))
+        rename.setProperty("displayShortcut", self.shortcuts["photo.rename"])
         rename.setEnabled(len(pairs) == 1 and not self.photo_file_loader.busy and not self.batch_rating_loader.busy)
+        cover = add("设为文件夹封面", "cover", lambda: self._set_photo_folder_cover(pairs[0]))
+        project = self._photo_project(pairs[0]) if len(pairs) == 1 else None
+        cover.setEnabled(bool(project and project.get("folder")))
+        mono = menu.addAction(theme_icon("photo.menu.grayscale", 16), "黑白预览")
+        mono.setData("grayscale")
+        mono.setProperty("displayShortcut", self.shortcuts["photo.grayscale"])
+        mono.setProperty("trailingCheck", self.grayscale_preview)
+        mono.triggered.connect(lambda: self._set_grayscale_preview(not self.grayscale_preview))
         add("复制文件路径", "copy_path", lambda: QApplication.clipboard().setText("\n".join(map(str, paths))))
         menu.addSeparator()
         remove = add("删除文件", "delete", lambda: self._delete_photo_groups(pairs))
         remove.setEnabled(not self.photo_file_loader.busy and not self.batch_rating_loader.busy)
         return menu
+
+    def _set_photo_folder_cover(self, pair):
+        project = self._photo_project(pair)
+        if project is None:
+            return
+        try:
+            self.store.set_folder_cover(project["id"], pair.display_path)
+        except (OSError, ValueError) as error:
+            NoticeDialog("无法设置文件夹封面", str(error), self).exec()
+            return
+        for card in getattr(self, "_folder_cards", []):
+            if card.project_id == project["id"]:
+                cached = self.loader.cached(pair.display_path, 420)
+                if cached is not None:
+                    card.set_cover(cached)
+                else:
+                    self._folder_cover_cards.setdefault(str(pair.display_path), []).append(card)
+                    self.loader.request(pair.display_path, 420)
+
+    def _apply_grayscale_preview(self, enabled, *, refresh=True):
+        self.grayscale_preview = bool(enabled)
+        self.filmstrip.hover_grayscale = self.grayscale_preview
+        self.preview_canvas.set_grayscale(self.grayscale_preview)
+        self.inspector_preview.set_grayscale(self.grayscale_preview)
+        self.multi_preview.set_grayscale(self.grayscale_preview)
+        self.large_screen_page.strip.grayscale = self.grayscale_preview
+        if refresh:
+            self._refresh_grayscale_thumbnails()
+
+    def _set_grayscale_preview(self, enabled):
+        enabled = bool(enabled)
+        if self.preferences.preview_grayscale != enabled:
+            from picklight.preferences import save_preferences
+            updated = replace(self.preferences, preview_grayscale=enabled)
+            try:
+                save_preferences(self.store, updated)
+            except OSError as error:
+                NoticeDialog("无法保存黑白预览设置", str(error), self).exec()
+                return
+            self.preferences = updated
+        self._apply_grayscale_preview(enabled)
 
     def _open_photo_explorer(self, pairs):
         # One window per source directory, selecting a representative file.
@@ -176,12 +229,15 @@ class PhotoMenuMixin:
             str(old): str(new) for old, new in renamed.items()}
         # Persist marks under the new file names even before the monitor's first scan.
         decisions = self.store.data.setdefault("photo_decisions", {})
+        for old in renamed:
+            decisions[self.store.photo_path_key(old)] = ""
+        migrated_decisions = {}
         for pair in self.pairs:
             state = "reject" if pair.key in self.marked else "keep" if pair.key in self.kept else ""
             for old in (pair.jpg, pair.raw):
                 if old in renamed:
-                    decisions[self.store.photo_path_key(renamed[old])] = state
-                    decisions[self.store.photo_path_key(old)] = ""
+                    migrated_decisions[self.store.photo_path_key(renamed[old])] = state
+        decisions.update(migrated_decisions)
         try:
             self.store.save()
         except OSError as error:

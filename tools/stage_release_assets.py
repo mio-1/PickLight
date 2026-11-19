@@ -12,7 +12,8 @@ def stage_assets(project: Path) -> Path:
     build = project / "build"
     build.mkdir(exist_ok=True)
     target = Path(tempfile.mkdtemp(prefix="release-assets-", dir=build))
-    for name in ("picklight.ico", "picklight.png"):
+    for name in ("picklight.ico", "picklight.png",
+                 "preferences-radio-checked.svg", "preferences-radio-unchecked.svg"):
         shutil.copy2(source / name, target / name)
     themes_source = source / "themes"
     themes_target = target / "themes"

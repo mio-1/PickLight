@@ -5,8 +5,8 @@ from dataclasses import replace
 from PySide6.QtCore import QPoint, QRectF, QSize, QTimer, Qt
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QComboBox, QFrame,
-    QGraphicsDropShadowEffect, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QMenu, QScrollArea, QStackedWidget, QToolButton, QVBoxLayout, QWidget)
+    QGraphicsDropShadowEffect, QGridLayout, QHBoxLayout, QLabel, QPushButton,
+    QMenu, QRadioButton, QScrollArea, QStackedWidget, QToolButton, QVBoxLayout, QWidget)
 
 from picklight.appearance import configure_appearance, ui_color
 from picklight.paths import asset_path
@@ -17,6 +17,30 @@ from picklight.ui.graphics import theme_icon
 from picklight.ui.menus import ColorManagementMenu
 from picklight.themes import theme_manager
 from picklight.ui.shortcut_preferences import PreferencesSearchEdit, ShortcutPreferences
+
+
+class SwitchCheckBox(QCheckBox):
+    """Compact accessible switch used for a single on/off preference."""
+
+    def __init__(self, checked=False, parent=None, *, accessible_name="启用自动导入"):
+        super().__init__(parent)
+        self.setChecked(checked)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFixedSize(40, 24)
+        self.setAccessibleName(accessible_name)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        track = self.rect().adjusted(1, 2, -1, -2)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(ui_color("#2f98ff" if self.isChecked() else "#45464a"))
+        painter.drawRoundedRect(track, track.height() / 2, track.height() / 2)
+        diameter = track.height() - 6
+        x = track.right() - diameter - 3 if self.isChecked() else track.left() + 3
+        painter.setBrush(QColor("#ffffff" if self.isChecked() else "#929397"))
+        painter.drawEllipse(x, track.top() + 3, diameter, diameter)
+        painter.end()
 
 
 class ThemeSwatch(QToolButton):
@@ -128,8 +152,8 @@ class PreferencesDialog(FolderModal):
         self.setWindowTitle("偏好设置")
         self.setWindowFlag(Qt.WindowType.NoDropShadowWindowHint, True)
         self.resize(888, 650)
-        self.setMinimumSize(740, 545)
-        self.layout().setContentsMargins(24, 24, 24, 24)
+        self.setMinimumSize(838, 545)
+        self.layout().setContentsMargins(0, 0, 0, 0)
         self.surface.setObjectName("preferencesSurface")
         shadow = QGraphicsDropShadowEffect(self.surface)
         shadow.setBlurRadius(24)
@@ -142,11 +166,13 @@ class PreferencesDialog(FolderModal):
             QFrame#preferencesCard { background: #2c2d30; border: 1px solid #404145; border-radius: 8px; }
             QFrame#preferencesDivider { background: #3b3c40; border: 0; }
             QLabel { background: transparent; border: 0; }
-            QLabel#preferencesHeading { font-size: 13px; font-weight: 600; }
+            QLabel#preferencesHeading { font-size: 14px; font-weight: 600; }
             QLabel#preferencesHint { color: #999a9e; font-size: 11px; }
             QLabel#preferencesError { color: #f2797d; font-size: 12px; }
-            QPushButton#preferencesGeneral { text-align: left; background: transparent; border: 0; border-radius: 6px; padding: 8px; font-weight: 600; }
+            QPushButton#preferencesGeneral { text-align: left; background: transparent; border: 0; border-radius: 6px; padding: 0 8px; min-height: 34px; font-size: 13px; font-weight: 400; }
+            QPushButton#preferencesGeneral:hover { background: #292a2e; }
             QPushButton#preferencesGeneral[selected="true"] { background: #36373b; }
+            QFrame#preferencesNavDivider { background: #36373b; border: 0; }
             QLineEdit#preferencesSearch { background: #191a1c; border: 1px solid #343538; border-radius: 6px; padding: 0; font-size: 13px; placeholder-text-color: #bdbec4; }
             QLineEdit#preferencesSearch:focus { border-color: #2f98ff; }
             QComboBox { background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 4px 7px; }
@@ -154,13 +180,17 @@ class PreferencesDialog(FolderModal):
             QComboBox[popupOpen="true"] { background: #191a1c; border-color: #414246; }
             QComboBox::drop-down { width: 17px; border: 0; }
             QComboBox QAbstractItemView { background: #202124; border: 1px solid #414246; selection-background-color: #36373b; padding: 4px; }
-            QCheckBox { spacing: 7px; min-height: 24px; }
+            QCheckBox { spacing: 7px; min-height: 24px; font-size: 13px; }
             QCheckBox::indicator { width: 14px; height: 14px; border: 1px solid #696a6e; border-radius: 3px; background: #242528; }
             QCheckBox::indicator:checked { background: #2f98ff; border-color: #2f98ff; }
             QCheckBox:disabled { color: #929397; }
-            QPushButton#preferencesSave { background: #2f98ff; border: 1px solid #4ba6ff; border-radius: 6px; padding: 8px 16px; font-weight: 600; color: #ffffff; }
+            QRadioButton { spacing: 7px; min-height: 24px; font-size: 13px; }
+            QLabel#preferencesOption { font-size: 13px; }
+            QRadioButton::indicator { width: 16px; height: 16px; border: 0; background: transparent; }
+            QRadioButton:disabled { color: #929397; }
+            QPushButton#preferencesSave { background: #2f98ff; border: 1px solid #4ba6ff; border-radius: 6px; padding: 8px 16px; font-size: 13px; font-weight: 600; color: #ffffff; }
             QPushButton#preferencesSave:hover { background: #42a2ff; }
-            QPushButton#preferencesApply, QPushButton#preferencesRestart { background: #343538; border: 1px solid #494a4e; border-radius: 6px; padding: 8px 16px; }
+            QPushButton#preferencesApply, QPushButton#preferencesRestart { background: #343538; border: 1px solid #494a4e; border-radius: 6px; padding: 8px 16px; font-size: 13px; }
             QPushButton#preferencesApply:hover, QPushButton#preferencesRestart:hover { background: #414246; }
             QFrame#shortcutRow { background: transparent; border: 0; border-radius: 5px; }
             QFrame#shortcutRow[alternate="true"] { background: #303134; }
@@ -176,35 +206,74 @@ class PreferencesDialog(FolderModal):
             QToolButton#preferencesClose:hover { background: #303134; }
         """)
         check = asset_path("check").replace("\\", "/")
+        radio_unchecked = asset_path("preferences-radio-unchecked.svg").replace("\\", "/")
+        radio_checked = asset_path("preferences-radio-checked.svg").replace("\\", "/")
         self.surface.setStyleSheet(self.surface.styleSheet() + f'''
             QCheckBox::indicator:checked {{ image: url("{check}"); }}
+            QRadioButton::indicator {{ image: url("{radio_unchecked}"); }}
+            QRadioButton::indicator:checked {{ image: url("{radio_checked}"); }}
             QCheckBox::indicator:disabled {{ background: #45464a; border-color: #56575b; }}
             QComboBox::down-arrow {{ image: none; width: 12px; height: 12px; }}
         ''')
         layout = QHBoxLayout(self.surface)
-        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setContentsMargins(8, 6, 8, 6)
         layout.setSpacing(8)
         sidebar = QWidget()
-        sidebar.setFixedWidth(200)
+        sidebar.setFixedWidth(206)
         nav = QVBoxLayout(sidebar)
         nav.setContentsMargins(4, 10, 4, 10)
-        nav.setSpacing(8)
+        nav.setSpacing(0)
         nav.addWidget(QLabel("偏好设置", objectName="preferencesHeading"))
-        nav.addSpacing(4)
+        nav.addSpacing(12)
         self.search = PreferencesSearchEdit()
         self.search.setAccessibleName("搜索偏好设置")
         nav.addWidget(self.search)
+        nav.addSpacing(8)
         self.general_button = QPushButton("常用", objectName="preferencesGeneral")
         self.general_button.setProperty("selected", True)
         self.general_button.setIcon(theme_icon("preferences.general", 18))
+        self.general_button.setIconSize(QSize(20, 20))
+        self.general_button.setFixedHeight(34)
         self.page_name = "general"
         self.general_button.clicked.connect(lambda: self._select_page("general"))
         nav.addWidget(self.general_button)
+        self.extra_buttons = {}
+        for name, title in (("sidebar", "左栏"),):
+            button = QPushButton(title, objectName="preferencesGeneral")
+            button.setProperty("selected", False)
+            button.setIcon(theme_icon(f"preferences.{name}", 20))
+            button.setIconSize(QSize(20, 20))
+            button.setFixedHeight(34)
+            button.clicked.connect(lambda _=False, value=name: self._select_page(value))
+            nav.addWidget(button)
+            self.extra_buttons[name] = button
+        self._add_preferences_nav_divider(nav)
+        for name, title in (("operation", "操纵"),):
+            button = QPushButton(title, objectName="preferencesGeneral")
+            button.setProperty("selected", False)
+            button.setIcon(theme_icon(f"preferences.{name}", 20))
+            button.setIconSize(QSize(20, 20))
+            button.setFixedHeight(34)
+            button.clicked.connect(lambda _=False, value=name: self._select_page(value))
+            nav.addWidget(button)
+            self.extra_buttons[name] = button
         self.shortcuts_button = QPushButton("快捷键", objectName="preferencesGeneral")
         self.shortcuts_button.setProperty("selected", False)
-        self.shortcuts_button.setIcon(theme_icon("preferences.shortcuts", 18))
+        self.shortcuts_button.setIcon(theme_icon("preferences.shortcuts", 20))
+        self.shortcuts_button.setIconSize(QSize(20, 20))
+        self.shortcuts_button.setFixedHeight(34)
         self.shortcuts_button.clicked.connect(lambda: self._select_page("shortcuts"))
         nav.addWidget(self.shortcuts_button)
+        self._add_preferences_nav_divider(nav)
+        for name, title in (("notification", "通知"), ("auto_import", "自动导入")):
+            button = QPushButton(title, objectName="preferencesGeneral")
+            button.setProperty("selected", False)
+            button.setIcon(theme_icon(f"preferences.{name}", 20))
+            button.setIconSize(QSize(20, 20))
+            button.setFixedHeight(34)
+            button.clicked.connect(lambda _=False, value=name: self._select_page(value))
+            nav.addWidget(button)
+            self.extra_buttons[name] = button
         nav.addStretch()
         layout.addWidget(sidebar)
         content = QWidget(objectName="preferencesContent")
@@ -212,7 +281,7 @@ class PreferencesDialog(FolderModal):
         right.setContentsMargins(0, 0, 0, 0)
         right.setSpacing(0)
         head = QHBoxLayout()
-        head.setContentsMargins(16, 10, 12, 6)
+        head.setContentsMargins(17, 7, 12, 6)
         self.heading = QLabel("常用", objectName="preferencesHeading")
         head.addWidget(self.heading)
         head.addStretch()
@@ -229,7 +298,7 @@ class PreferencesDialog(FolderModal):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         body = QWidget()
         cards = QVBoxLayout(body)
-        cards.setContentsMargins(16, 4, 16, 16)
+        cards.setContentsMargins(17, 4, 22, 16)
         cards.setSpacing(12)
         self.appearance_card, appearance = self._card("外观")
         cards.addWidget(self.appearance_card)
@@ -309,9 +378,209 @@ class PreferencesDialog(FolderModal):
         self.pages.addWidget(scroll)
         self.shortcut_page = ShortcutPreferences(parent.shortcuts)
         self.pages.addWidget(self.shortcut_page)
+        self.extra_pages = {}
+        for name, title in (("sidebar", "左栏"), ("operation", "操纵"),
+                            ("notification", "通知"),
+                            ("auto_import", "自动导入")):
+            page = QScrollArea()
+            page.setWidgetResizable(True)
+            page.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            body = QWidget()
+            rows = QVBoxLayout(body)
+            rows.setContentsMargins(17, 4, 22, 16)
+            rows.setSpacing(12)
+            card, controls = self._card(title)
+            rows.addWidget(card)
+            rows.addStretch()
+            page.setWidget(body)
+            self.pages.addWidget(page)
+            self.extra_pages[name] = (page, controls)
+        sidebar_page, sidebar = self.extra_pages["sidebar"]
+        sidebar_rows = sidebar_page.widget().layout()
+        sidebar.takeAt(0).widget().deleteLater()
+        sidebar_rows.takeAt(1)
+        sidebar_card = sidebar_rows.takeAt(0).widget()
+        sidebar_card.deleteLater()
+        double_card, double_layout = self._card("")
+        double_layout.takeAt(0).widget().deleteLater()
+        double_layout.addWidget(QLabel("双击项目", objectName="preferencesHeading"))
+        self.sidebar_double_click_group = QButtonGroup(self)
+        self.sidebar_double_click_rename = QRadioButton("重命名")
+        self.sidebar_double_click_toggle = QRadioButton("展开/收起")
+        for action, radio in (("rename", self.sidebar_double_click_rename),
+                              ("toggle", self.sidebar_double_click_toggle)):
+            self.sidebar_double_click_group.addButton(radio)
+            radio.setCursor(Qt.CursorShape.PointingHandCursor)
+            radio.setChecked(self.baseline.sidebar_double_click_action == action)
+        double_row = self._option_grid(178, 178)
+        double_row.addWidget(self.sidebar_double_click_rename, 0, 0)
+        double_row.addWidget(self.sidebar_double_click_toggle, 0, 1)
+        double_layout.addLayout(double_row)
+        sidebar_rows.addWidget(double_card)
+
+        visible_card, visible_layout = self._card("")
+        visible_layout.takeAt(0).widget().deleteLater()
+        visible_layout.addWidget(QLabel("在侧栏显示的文件：", objectName="preferencesHeading"))
+        self.show_quick_access = self._check("快速访问", self.baseline.sidebar_quick_access, None)
+        self.show_folders = self._check("文件夹", self.baseline.sidebar_folders, None)
+        visible_grid = self._option_grid(178, 178)
+        visible_grid.addWidget(self.show_quick_access, 0, 0)
+        visible_grid.addWidget(self.show_folders, 0, 1)
+        visible_layout.addLayout(visible_grid)
+        sidebar_rows.addWidget(visible_card)
+        sidebar_rows.addStretch()
+        operation_page, operation = self.extra_pages["operation"]
+        operation_rows = operation_page.widget().layout()
+        operation.takeAt(0).widget().deleteLater()
+        operation_rows.takeAt(1)
+        operation_rows.takeAt(0).widget().deleteLater()
+        mouse_card, mouse_layout = self._card("")
+        mouse_layout.takeAt(0).widget().deleteLater()
+        mouse_layout.addWidget(QLabel("鼠标", objectName="preferencesHeading"))
+        wheel_row = self._option_grid(191, 172)
+        wheel_row.addWidget(QLabel("鼠标滚轮"), 0, 0)
+        self.preview_wheel_group = QButtonGroup(self)
+        self.preview_wheel_radios = {}
+        for (value, title), position in zip((("pan", "上下移动图片"),
+                                             ("navigate", "左右翻页"),
+                                             ("zoom", "缩放图片")), ((0, 1), (0, 2), (1, 1))):
+            radio = QRadioButton(title)
+            radio.setCursor(Qt.CursorShape.PointingHandCursor)
+            radio.setChecked(self.baseline.preview_wheel_action == value)
+            self.preview_wheel_group.addButton(radio)
+            self.preview_wheel_radios[value] = radio
+            wheel_row.addWidget(radio, *position)
+        mouse_layout.addLayout(wheel_row)
+        mouse_layout.addWidget(self._divider())
+        hover_row = self._option_grid(191, 172)
+        hover_row.addWidget(QLabel("悬停放大"), 0, 0)
+        self.hover_zoom_group = QButtonGroup(self)
+        self.hover_zoom_enabled_radio = QRadioButton("启用")
+        self.hover_zoom_disabled_radio = QRadioButton("禁用")
+        for enabled, radio, column in ((True, self.hover_zoom_enabled_radio, 1),
+                                       (False, self.hover_zoom_disabled_radio, 2)):
+            radio.setChecked(self.baseline.hover_zoom_enabled == enabled)
+            radio.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.hover_zoom_group.addButton(radio)
+            hover_row.addWidget(radio, 0, column)
+        mouse_layout.addLayout(hover_row)
+        mouse_layout.addWidget(self._divider())
+        double_row = self._option_grid(191, 172)
+        double_row.addWidget(QLabel("双击文件"), 0, 0)
+        self.double_click_group = QButtonGroup(self)
+        self.double_click_preview_radio = QRadioButton("在 PickLight 查看")
+        self.double_click_default_radio = QRadioButton("在默认应用打开")
+        self.double_click_preview_radio.setChecked(self.baseline.double_click_preview)
+        self.double_click_default_radio.setChecked(not self.baseline.double_click_preview)
+        for column, radio in enumerate((self.double_click_preview_radio, self.double_click_default_radio), start=1):
+            radio.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.double_click_group.addButton(radio)
+            double_row.addWidget(radio, 0, column)
+        mouse_layout.addLayout(double_row)
+        mouse_layout.addWidget(self._divider())
+        middle_row = self._option_grid(191, 172)
+        middle_row.addWidget(QLabel("滚轮按键"), 0, 0)
+        self.middle_click_group = QButtonGroup(self)
+        self.middle_click_radios = {}
+        for value, title, row, column in (("new_window", "在新窗口打开文件", 0, 1),
+                                          ("system", "系统默认", 0, 2)):
+            radio = QRadioButton(title)
+            radio.setChecked(self.baseline.middle_click_action == value)
+            radio.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.middle_click_group.addButton(radio)
+            self.middle_click_radios[value] = radio
+            middle_row.addWidget(radio, row, column)
+        mouse_layout.addLayout(middle_row)
+        mouse_layout.addWidget(self._divider())
+        self.ctrl_wheel_zoom = QCheckBox("调整缩略图大小")
+        self.ctrl_wheel_zoom.setChecked(self.baseline.ctrl_wheel_zoom)
+        self.ctrl_wheel_zoom.setCursor(Qt.CursorShape.PointingHandCursor)
+        zoom_row = self._option_grid(191, 172)
+        zoom_row.addWidget(QLabel("Ctrl + 滚轮"), 0, 0)
+        zoom_row.addWidget(self.ctrl_wheel_zoom, 0, 1)
+        mouse_layout.addLayout(zoom_row)
+        operation_rows.addWidget(mouse_card)
+
+        keyboard_card, keyboard_layout = self._card("")
+        keyboard_layout.takeAt(0).widget().deleteLater()
+        keyboard_layout.addWidget(QLabel("键盘", objectName="preferencesHeading"))
+        space_row = self._option_grid(191, 172)
+        space_row.addWidget(QLabel("空格键"), 0, 0)
+        self.space_key_group = QButtonGroup(self)
+        self.space_key_radios = {}
+        for value, title, row in (("preview", "快速预览", 0), ("scroll", "滚动页面", 1)):
+            radio = QRadioButton(title)
+            radio.setChecked(self.baseline.space_key_action == value)
+            radio.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.space_key_group.addButton(radio)
+            self.space_key_radios[value] = radio
+            space_row.addWidget(radio, row, 1)
+        keyboard_layout.addLayout(space_row)
+        operation_rows.addWidget(keyboard_card)
+        operation_rows.addStretch()
+        notification_page, notification = self.extra_pages["notification"]
+        old_heading = notification.takeAt(0).widget()
+        old_heading.hide()
+        old_heading.deleteLater()
+        notification_rows = notification_page.widget().layout()
+        notification_rows.takeAt(1)
+        notification_card = notification_rows.takeAt(0).widget()
+        notification_card.deleteLater()
+        self.notification_popups_enabled = SwitchCheckBox(
+            self.baseline.notification_popups_enabled, accessible_name="弹出通知")
+        self.notification_sounds_enabled = SwitchCheckBox(
+            self.baseline.notification_sounds_enabled, accessible_name="启用通知音效")
+        rows_layout = notification_rows
+
+        sound_card, sound_layout = self._card("")
+        sound_layout.takeAt(0).widget().deleteLater()
+        sound_header = QHBoxLayout()
+        sound_header.addWidget(QLabel("启用通知音效", objectName="preferencesHeading"))
+        sound_header.addStretch()
+        sound_header.addWidget(self.notification_sounds_enabled)
+        sound_layout.addLayout(sound_header)
+        self.notify_folder_delete_sound = self._check(
+            "删除文件夹", self.baseline.notify_folder_delete_sound, sound_layout)
+        rows_layout.addWidget(sound_card)
+        self.notification_sounds_enabled.toggled.connect(self.notify_folder_delete_sound.setEnabled)
+        self.notify_folder_delete_sound.setEnabled(self.notification_sounds_enabled.isChecked())
+
+        popup_card, popup_layout = self._card("")
+        old_heading = popup_layout.takeAt(0).widget()
+        old_heading.hide()
+        old_heading.deleteLater()
+        popup_header = QHBoxLayout()
+        popup_header.addWidget(QLabel("弹出通知", objectName="preferencesHeading"))
+        popup_header.addStretch()
+        popup_header.addWidget(self.notification_popups_enabled)
+        popup_layout.addLayout(popup_header)
+        self.notify_auto_import = self._check(
+            "自动导入文件时，弹出通知", self.baseline.notify_auto_import, popup_layout)
+        rows_layout.addWidget(popup_card)
+        rows_layout.addStretch()
+        self.notification_popups_enabled.toggled.connect(
+            self.notify_auto_import.setEnabled)
+        self.notification_popups_enabled.toggled.emit(self.notification_popups_enabled.isChecked())
+        automatic = self.extra_pages["auto_import"][1]
+        old_heading = automatic.takeAt(0).widget()
+        old_heading.hide()
+        old_heading.deleteLater()
+        auto_row = QHBoxLayout()
+        auto_heading = QLabel("启用自动导入", objectName="preferencesHeading")
+        auto_row.addWidget(auto_heading)
+        auto_row.addStretch()
+        self.auto_import_enabled = SwitchCheckBox(self.baseline.auto_import_enabled)
+        auto_row.addWidget(self.auto_import_enabled)
+        automatic.addLayout(auto_row)
+        auto_description = QLabel(
+            "开启后，PickLight 会监控已关联的文件夹。文件夹中新增的图片，或新建子文件夹中的图片，"
+            "都会自动显示在原关联文件夹中；子文件夹不会单独添加到左栏。",
+            objectName="preferencesHint")
+        auto_description.setWordWrap(True)
+        automatic.addWidget(auto_description)
         right.addWidget(self.pages, 1)
         footer = QVBoxLayout()
-        footer.setContentsMargins(16, 8, 12, 12)
+        footer.setContentsMargins(16, 8, 20, 12)
         footer.setSpacing(6)
         self.status = QLabel(objectName="preferencesHint")
         self.status.setWordWrap(True)
@@ -348,6 +617,17 @@ class PreferencesDialog(FolderModal):
         return card, layout
 
     @staticmethod
+    def _option_grid(first_column, second_column):
+        grid = QGridLayout()
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(0)
+        grid.setVerticalSpacing(4)
+        grid.setColumnMinimumWidth(0, first_column)
+        grid.setColumnMinimumWidth(1, second_column)
+        grid.setColumnStretch(2, 1)
+        return grid
+
+    @staticmethod
     def _divider():
         line = QFrame(objectName="preferencesDivider")
         line.setFixedHeight(1)
@@ -358,7 +638,8 @@ class PreferencesDialog(FolderModal):
         checkbox = QCheckBox(text)
         checkbox.setChecked(checked)
         checkbox.setCursor(Qt.CursorShape.PointingHandCursor)
-        layout.addWidget(checkbox)
+        if layout is not None:
+            layout.addWidget(checkbox)
         return checkbox
 
     def _select_page(self, name):
@@ -367,6 +648,15 @@ class PreferencesDialog(FolderModal):
             self.shortcut_page.search.clear()
         self.search.clear()
         self._filter("")
+
+    @staticmethod
+    def _add_preferences_nav_divider(layout):
+        layout.addSpacing(4)
+        divider = QFrame()
+        divider.setObjectName("preferencesNavDivider")
+        divider.setFixedHeight(1)
+        layout.addWidget(divider)
+        layout.addSpacing(4)
 
     def _filter(self, query):
         query = query.strip().casefold()
@@ -377,12 +667,26 @@ class PreferencesDialog(FolderModal):
         self.empty.setVisible(self.appearance_card.isHidden() and self.startup_card.isHidden())
         page = self.page_name
         if query:
-            page = "shortcuts" if (query in "快捷键" or
-                (self.appearance_card.isHidden() and self.startup_card.isHidden() and self.shortcut_page.matches(query))) else "general"
+            keywords = {
+                "sidebar": "左栏 侧栏 快速访问 文件夹",
+                "operation": "操纵 操作 双击 图片 预览 滚轮 悬停 缩略图 空格键",
+                "notification": "通知 音效 删除文件夹 自动导入",
+                "auto_import": "自动导入 监控 目录 文件夹",
+            }
+            page = next((name for name, words in keywords.items() if query in words.casefold()), None)
+            if page is None:
+                page = "shortcuts" if (query in "快捷键" or
+                    (self.appearance_card.isHidden() and self.startup_card.isHidden()
+                     and self.shortcut_page.matches(query))) else "general"
             self.shortcut_page.search.setText("" if query in "快捷键" else query)
-        self.pages.setCurrentIndex(1 if page == "shortcuts" else 0)
-        self.heading.setText("快捷键" if page == "shortcuts" else "常用")
-        for button, name in ((self.general_button, "general"), (self.shortcuts_button, "shortcuts")):
+        self.pages.setCurrentWidget(self.shortcut_page if page == "shortcuts" else
+                                    self.extra_pages[page][0] if page in self.extra_pages else self.pages.widget(0))
+        titles = {"general": "常用", "shortcuts": "快捷键", "sidebar": "左栏",
+                  "operation": "操纵", "notification": "通知",
+                  "auto_import": "自动导入"}
+        self.heading.setText(titles[page])
+        for button, name in ((self.general_button, "general"), (self.shortcuts_button, "shortcuts"),
+                             *((value, key) for key, value in self.extra_buttons.items())):
             button.setProperty("selected", not query and page == name)
             button.style().unpolish(button)
             button.style().polish(button)
@@ -396,7 +700,25 @@ class PreferencesDialog(FolderModal):
         return replace(self.baseline, appearance=self.theme_group.checkedButton().name,
                        scale=self.scale.currentData(), transparency=self.transparency.isChecked(),
                        sidebar_counts=self.counts.isChecked(), launch_at_login=self.autostart.isChecked(),
-                       gpu=self.gpu.isChecked())
+                       gpu=self.gpu.isChecked(), sidebar_quick_access=self.show_quick_access.isChecked(),
+                       sidebar_folders=self.show_folders.isChecked(),
+                       sidebar_double_click_action=("rename" if self.sidebar_double_click_rename.isChecked()
+                                                    else "toggle"),
+                       double_click_preview=self.double_click_preview_radio.isChecked(),
+                       ctrl_wheel_zoom=self.ctrl_wheel_zoom.isChecked(),
+                       preview_wheel_action=next(
+                           action for action, radio in self.preview_wheel_radios.items() if radio.isChecked()),
+                       hover_zoom_enabled=self.hover_zoom_enabled_radio.isChecked(),
+                       middle_click_action=next(
+                           action for action, radio in self.middle_click_radios.items() if radio.isChecked()),
+                       space_key_action=next(
+                           action for action, radio in self.space_key_radios.items() if radio.isChecked()),
+                       notify_auto_import=self.notify_auto_import.isChecked(),
+                       notification_popups_enabled=self.notification_popups_enabled.isChecked(),
+                       notification_sounds_enabled=self.notification_sounds_enabled.isChecked(),
+                       notify_folder_delete_sound=self.notify_folder_delete_sound.isChecked(),
+                       auto_import_enabled=self.auto_import_enabled.isChecked(),
+                       auto_import_path="")
 
     def _update_restart_hint(self, *_):
         pending = self.scale.currentData() != getattr(self.owner, "startup_scale", 100)

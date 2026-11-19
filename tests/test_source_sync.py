@@ -4,6 +4,7 @@ import os
 import tempfile
 import time
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from threading import Event
 from unittest.mock import patch
@@ -61,6 +62,7 @@ class SourceSyncTests(unittest.TestCase):
     def window(self):
         window = MainWindow(restore_project=False)
         self.addCleanup(window.close)
+        window._apply_preferences(replace(window.preferences, auto_import_enabled=True))
         window.source_monitor.debounce.setInterval(40)
         window.source_monitor.poll.setInterval(150)
         window.show()
@@ -80,6 +82,15 @@ class SourceSyncTests(unittest.TestCase):
         self.assertIn(str(sidecar), second.changed)
         self.assertEqual(second.pairs[str(self.photos)][0].display_path, renamed)
 
+    def test_unchanged_poll_skips_recursive_pairing(self):
+        self.image()
+        first = scan_sources((str(self.photos),), {}, set(), Event())
+        with patch("picklight.source_monitor.scan_pairs") as pairing:
+            second = scan_sources((str(self.photos),), first.files, set(), Event())
+        pairing.assert_not_called()
+        self.assertFalse(second.changed)
+        self.assertEqual(second.files, first.files)
+
     def test_grid_sync_preserves_photo_inspector_instead_of_switching_to_folder(self):
         self.image()
         window = self.window()
@@ -89,6 +100,21 @@ class SourceSyncTests(unittest.TestCase):
                       and window.current_image is not None
                       and window.current_image.pixelColor(10, 10).green() > 240)
         self.assertIs(window.inspector_stack.currentWidget(), window.inspector_scroll)
+
+    def test_large_screen_survives_external_photo_overwrite_and_rename(self):
+        photo = self.image()
+        self.image("two.JPG")
+        window = self.window()
+        window._enter_large_screen()
+        self.image(size=(90, 130), color="#00ff00")
+        self.wait_for(lambda: window.dimensions_label.text() == "90 × 130")
+        self.assertTrue(window._large_screen_active())
+        renamed = photo.with_name("renamed.JPG")
+        photo.rename(renamed)
+        self.wait_for(lambda: window._current_preview_path() == renamed)
+        self.assertTrue(window._large_screen_active())
+        self.assertIn("renamed.JPG", window.large_screen_title.text())
+        self.assertEqual(window.large_screen_page.strip.model().rowCount(), 2)
 
     def test_native_watch_rearms_after_atomic_save_and_watches_new_subfolders(self):
         photo = self.image()

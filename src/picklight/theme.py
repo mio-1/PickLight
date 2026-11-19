@@ -2,9 +2,10 @@
 
 STYLE = """
 QWidget { background: transparent; color: #ffffff; font-family: 'Microsoft YaHei UI'; font-size: 12px; }
-QLineEdit, QTextEdit, QPlainTextEdit, QAbstractSpinBox { selection-background-color: #2f8fe8; selection-color: #ffffff; }
+QLineEdit, QTextEdit, QPlainTextEdit, QAbstractSpinBox { selection-background-color: #3297ff; selection-color: #ffffff; }
 QMainWindow, QWidget#root, QWidget#workspaceBody, QSplitter#workspaceSplitter { background: transparent; }
-QFrame#titleBar, QFrame#viewer, QWidget#inspectorContent { background: transparent; border: 0; }
+QFrame#titleBar, QFrame#viewer { background: transparent; border: 0; }
+QWidget#inspectorContent { background: #1f2023; border: 0; }
 QFrame#browserPanel { background: #1f2023; border-right: 1px solid #303135; }
 QFrame#inspector { background: #1f2023; border-left: 1px solid #303135; }
 QFrame#folderCard { background: transparent; border: 0; }
@@ -28,10 +29,10 @@ QFrame#iconTooltip { background: #131416; border: 1px solid #414246; border-radi
 QLabel#iconTooltipLabel { color: #f7f8f8; font-size: 12px; font-weight: 600; background: transparent; border: 0; }
 QLineEdit#folderInspectorField[role="name"] { font-weight: 400; }
 QLineEdit#folderInspectorField:hover { border-color: #484a50; }
-QLineEdit#folderInspectorField:focus { border-color: #2ea8f4; }
+QLineEdit#folderInspectorField:focus { border-color: #3297ff; }
 QTextEdit#folderInspectorField { background: #191a1c; border: 1px solid #2e2f32; border-radius: 6px; color: #ffffff; padding: 6px 10px; font-size: 13px; }
 QTextEdit#folderInspectorField:hover { border-color: #484a50; }
-QTextEdit#folderInspectorField:focus { border-color: #2ea8f4; }
+QTextEdit#folderInspectorField:focus { border-color: #3297ff; }
 QFrame#folderInspectorDivider { background: #303134; border: 0; max-height: 1px; min-height: 1px; }
 QWidget#folderInspector QLabel#detailKey, QWidget#collectionInspector QLabel#detailKey { color: #e7e7eb; font-size: 11px; font-weight: 400; }
 QWidget#folderInspector QLabel#detailValue, QWidget#collectionInspector QLabel#detailValue { color: #e4e4e8; font-family: 'JetBrains Mono', 'Consolas'; font-size: 11px; font-weight: 400; }
@@ -43,7 +44,7 @@ QFrame#folderHeaderPill { background: transparent; border: 0; border-radius: 5px
 QFrame#folderHeaderPill[hovered="true"] { background: #27282c; }
 QLabel#folderSection[hovered="true"] { color: #ffffff; }
 QLabel#folderHeaderChevron { color: #dedee2; font-size: 9px; }
-QLabel#filename { color: #ffffff; font-family: "Segoe UI", "Microsoft YaHei UI"; font-size: 13px; font-weight: 600; }
+QLabel#filename { color: #ffffff; font-family: "Segoe UI", "Microsoft YaHei UI"; font-size: 13px; font-weight: 400; }
 QLabel#imageZoomPercent { color: #f7f7f8; font-size: 12px; font-weight: 600; }
 QFrame#folderModalSurface { background: #18191c; border: 1px solid #414246; border-radius: 8px; }
 QLabel#folderModalTitle { color: #f7f8f8; font-size: 16px; font-weight: 700; }
@@ -54,13 +55,13 @@ QLabel#fileDeleteCount { color: #f7f8f8; font-size: 13px; font-weight: 600; }
 QLabel#fileDeleteHint { color: #929397; font-size: 11px; }
 QPushButton#folderModalCancel { background: #242528; border: 1px solid #343538; border-radius: 6px; color: #f7f8f8; padding: 5px 12px; font-size: 13px; }
 QPushButton#folderModalCancel:hover { background: #303135; }
-QPushButton#folderModalPrimary { background: #2f8fe8; border: 1px solid #479ef0; border-radius: 6px; color: #ffffff; font-size: 13px; font-weight: 600; }
+QPushButton#folderModalPrimary { background: #3297ff; border: 1px solid #3297ff; border-radius: 6px; color: #ffffff; font-size: 13px; font-weight: 600; }
 QPushButton#folderModalPrimary:hover { background: #3b9bf4; }
 QToolButton#folderModalClose { background: transparent; border: 0; border-radius: 5px; }
 QToolButton#folderModalClose:hover { background: #303135; }
 QFrame#folderModalSeparator { background: #303134; border: 0; }
 QLineEdit#folderDestinationSearch { background: #121316; color: #ffffff; border: 1px solid #343538; border-radius: 6px; padding: 0 6px; font-size: 13px; }
-QLineEdit#folderDestinationSearch:focus { border-color: #2f8fe8; }
+QLineEdit#folderDestinationSearch:focus { border-color: #3297ff; }
 QLabel#inspectorName { background: transparent; border: 0; padding: 0; color: #f2f2f4; font-family: 'Segoe UI', 'Microsoft YaHei UI'; font-size: 13px; font-weight: 600; }
 QLabel#hint { color: rgba(255,255,255,185); }
 QLabel#detailKey { color: #c2c3c8; font-size: 12px; }
@@ -90,10 +91,28 @@ QToolButton#viewMode { background: transparent; border: 0; border-radius: 6px; p
 QToolButton#viewMode::menu-indicator { image: none; width: 0; }
 QLineEdit#folderFilterEdit { background: #191a1c; border: 1px solid #303134; border-radius: 6px; color: #ffffff; padding: 0; font-size: 12px; }
 QLineEdit#folderFilterEdit:hover { border-color: #414246; }
-QLineEdit#folderFilterEdit:focus, QLineEdit#folderFilterEdit[filtering="true"] { border-color: #2ea8f4; }
+QLineEdit#folderFilterEdit:focus, QLineEdit#folderFilterEdit[filtering="true"] { border-color: #3297ff; }
 QToolButton#folderFilterClear { background: transparent; border: 0; padding: 0; }
-QToolButton#menuButton, QToolButton#sidebarToggle, QToolButton#projectAdd, QToolButton#folderNavigate, QToolButton#zoomAdjust, QToolButton#searchToggle, QToolButton#filterButton, QToolButton#imageBack, QToolButton#imageFit, QToolButton#imagePrevious, QToolButton#imageNext, QToolButton#filterClear { background: transparent; border: 0; border-radius: 5px; color: white; padding: 0; }
+QToolButton#menuButton, QToolButton#folderSwitch, QToolButton#sidebarToggle, QToolButton#projectAdd, QToolButton#folderNavigate, QToolButton#zoomAdjust, QToolButton#searchToggle, QToolButton#filterButton, QToolButton#imageBack, QToolButton#imageFit, QToolButton#imagePrevious, QToolButton#imageNext, QToolButton#filterClear { background: transparent; border: 0; border-radius: 5px; color: white; padding: 0; }
+QFrame#folderSwitchCard { background: #191a1d; border: 1px solid #414246; border-radius: 8px; }
+QLineEdit#folderSwitchSearch { background: transparent; border: 0; padding: 0 2px; color: #f7f8f8; font-size: 13px; }
+QLineEdit#folderSwitchSearch:focus { border: 0; }
+QToolButton#folderSwitchClose { background: transparent; border: 0; border-radius: 4px; }
+QToolButton#folderSwitchClose:hover { background: #414247; }
+QPushButton#folderSwitchTab { background: transparent; border: 0; border-radius: 6px; color: #c9cacf; padding: 0 8px; font-size: 12px; }
+QPushButton#folderSwitchTab:hover { background: #34353a; }
+QPushButton#folderSwitchTab:checked { background: #303136; color: #ffffff; }
+QFrame#folderSwitchSeparator { background: #414246; border: 0; }
+QListWidget#folderSwitchList { background: transparent; border: 0; color: #f7f8f8; outline: 0; padding: 8px 5px; font-size: 13px; }
+QListWidget#folderSwitchList::item { min-height: 26px; padding: 0 6px; border-radius: 6px; }
+QListWidget#folderSwitchList::item:hover { background: #34353a; }
+QListWidget#folderSwitchList::item:selected { background: #303136; }
+QFrame#folderSwitchFooter { background: #191a1d; border-top: 1px solid #303136; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px; }
+QLabel#folderSwitchHint { color: #777981; font-size: 11px; }
+QLabel#folderSwitchKey { background: #303136; border-radius: 3px; color: #d8d9dc; font-family: 'Consolas'; font-size: 10px; padding: 0 4px; }
 QToolButton#imageFit:checked { background: #333439; }
+QToolButton#imageAction { background: transparent; border: 0; border-radius: 5px; padding: 0; }
+QToolButton#imageAction:checked { background: #333439; }
 QToolButton#reviewAutoAdvance { background: transparent; border: 1px solid transparent; border-radius: 5px; padding: 0; }
 QToolButton#reviewAutoAdvance:checked { background: #333439; border-color: #53565e; }
 QToolButton#projectAdd:hover { background: #27282c; border-radius: 5px; }
@@ -106,8 +125,8 @@ QLabel#filterBadge { background: #3297ff; color: white; border-radius: 6px; font
 QLineEdit#photoSearch, QLineEdit#compactPhotoSearch, QComboBox#sortPicker { background: #202024; border: 1px solid #45454c; border-radius: 6px; color: white; padding: 4px 9px; }
 QLineEdit#photoSearch, QLineEdit#compactPhotoSearch { background: #131416; border: 1px solid #2b2c2f; border-radius: 6px; color: #ffffff; padding: 0; font-size: 13px; }
 QLineEdit#photoSearch:hover, QLineEdit#compactPhotoSearch:hover { border-color: #48494d; background: #191a1d; }
-QLineEdit#photoSearch:focus, QLineEdit#compactPhotoSearch:focus { border-color: #2ea8f4; }
-QLineEdit#projectNameEditor:focus, QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus { border-color: #2ea8f4; }
+QLineEdit#photoSearch:focus, QLineEdit#compactPhotoSearch:focus { border-color: #3297ff; }
+QLineEdit#projectNameEditor:focus, QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus { border-color: #3297ff; }
 QMenu#folderContextMenu { background: #18191c; border: 1px solid #414246; border-radius: 8px; padding: 4px; }
 QMenu#folderContextMenu::item { color: #f7f8f8; font-family: "Segoe UI", "Microsoft YaHei UI"; font-size: 13px; padding: 5px 12px 5px 8px; border-radius: 6px; }
 QMenu#folderContextMenu::item:selected { background: #292a2d; }
@@ -140,7 +159,7 @@ QTreeWidget#projectList { selection-background-color: transparent; }
 QTreeWidget#projectList::item { margin: 0; padding: 0; border: 0; }
 QTreeWidget#projectList::item:selected { background: transparent; color: white; }
 QTreeWidget#projectList::branch:selected { background: transparent; }
-QLineEdit#projectNameEditor { background: #292a2f; border: 1px solid #62646d; border-radius: 3px; color: white; padding: 0 3px; font-size: 12px; }
+QLineEdit#projectNameEditor { background: #292a2f; border: 1px solid #62646d; border-radius: 3px; color: white; padding: 0 3px; font-size: 13px; }
 QListWidget#photoGrid::item { margin: 2px; padding: 3px; border: 0; border-radius: 6px; }
 QLineEdit#photoNameEditor { background: #191a1c; color: #ffffff; border: 1px solid #3297ff; border-radius: 4px; padding: 0 3px; font-size: 13px; font-weight: 500; }
 QSplitter::handle { background: transparent; width: 1px; }
@@ -158,5 +177,13 @@ QSlider::handle:horizontal { width: 11px; margin: -5px 0; border-radius: 6px; ba
 QMenu { background: #202024; border: 1px solid #45454b; color: white; }
 QMenu::item { padding: 7px 22px 7px 10px; }
 QMenu::item:selected { background: #292a2e; }
+QLabel#catalogDialogTitle { font-size: 15px; font-weight: 600; color: #f7f8f8; }
+QLabel#catalogHint { color: #929397; font-size: 12px; }
+QComboBox#compareSource { background: #202124; border: 1px solid #3b3c40; border-radius: 6px;
+    min-height: 30px; padding: 0 10px; font-size: 13px; }
+QComboBox#compareSource { min-height: 24px; font-size: 11px; padding: 0 4px; }
+QPushButton#catalogButton { min-height: 30px; padding: 0 16px; font-size: 13px; border-radius: 6px; }
+QFrame#compareTile { background: #202124; border: 1px solid #343538; border-radius: 6px; }
+QFrame#compareTile[active="true"] { border-color: #3297ff; }
 
 """

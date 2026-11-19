@@ -50,11 +50,17 @@ class FolderContextMenu(QMenu):
         font.setPixelSize(11)
         painter.setFont(font)
         for action in self.actions():
+            if action.property("trailingCheck") is True and action.isVisible():
+                from picklight.ui.graphics import theme_icon
+                rect = self.actionGeometry(action)
+                theme_icon("check", 14).paint(painter, rect.right() - 23,
+                                               rect.center().y() - 7, 14, 14)
             shortcut = action.property("displayShortcut")
             if not shortcut or not action.isVisible():
                 continue
             painter.setPen(QColor("#96979b" if action.isEnabled() else "#626368"))
-            rect = QRectF(self.actionGeometry(action)).adjusted(0, 0, -12, 0)
+            inset = 36 if action.property("trailingCheck") is True else 12
+            rect = QRectF(self.actionGeometry(action)).adjusted(0, 0, -inset, 0)
             painter.drawText(rect, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
                              QKeySequence(shortcut).toString(QKeySequence.SequenceFormat.NativeText))
         painter.end()

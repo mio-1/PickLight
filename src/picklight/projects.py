@@ -12,7 +12,7 @@ from PySide6.QtWidgets import QFileDialog, QTreeWidgetItem
 from picklight.metadata import MetadataError, read_dng_ratings
 from picklight.message_dialogs import MessageBox as QMessageBox
 from picklight.library import PhotoPair, scan_pairs
-from picklight.ui.graphics import safe_rating
+from picklight.ui.graphics import oriented_jpeg_size, safe_rating
 from picklight.file_access import file_stamp, path_key
 
 
@@ -23,6 +23,7 @@ class PreparedProject:
     ratings: dict[str, int]
     errors: int
     files: dict = field(default_factory=dict)
+    aspects: dict[str, float] = field(default_factory=dict)
 
 
 def source_stamps(pairs):
@@ -63,23 +64,33 @@ def prepare_project(folder: Path, *, capture_files=False, progress=None, cancel=
         except MetadataError:
             dng_error = len(dng_paths)
             dng_ratings = {path: None for path in dng_paths}
-    results, completed = {}, 0
+    results, aspects, completed = {}, {}, 0
+    def load_pair(pair):
+        rating = safe_rating(pair, dng_ratings)
+        path = pair.display_path
+        try:
+            size = oriented_jpeg_size(path) if path.suffix.casefold() in (".jpg", ".jpeg") else None
+        except (OSError, ValueError):
+            size = None
+        aspect = size.height() / size.width() if size and size.isValid() and size.width() else 2 / 3
+        return rating, aspect
+
     with ThreadPoolExecutor(max_workers=8, thread_name_prefix="picklight-project-rating") as pool:
-        futures = {pool.submit(safe_rating, pair, dng_ratings): pair for pair in pairs}
+        futures = {pool.submit(load_pair, pair): pair for pair in pairs}
         for future in as_completed(futures):
             if cancel is not None and cancel.is_set():
                 for pending in futures:
                     pending.cancel()
                 raise CancelledError()
             pair = futures[future]
-            results[pair.key] = future.result()
+            results[pair.key], aspects[str(pair.display_path)] = future.result()
             completed += bool(pair.jpg) + bool(pair.raw)
             if progress:
                 progress(completed, total, str(pair.display_path))
     if cancel is not None and cancel.is_set():
         raise CancelledError()
     return PreparedProject(folder, pairs, {pair.key: results[pair.key][0] for pair in pairs},
-                           sum(result[1] for result in results.values()) + dng_error, files)
+                           sum(result[1] for result in results.values()) + dng_error, files, aspects)
 
 
 class ProjectSessionMixin:
@@ -162,7 +173,7 @@ class ProjectSessionMixin:
                 self.kept.add(pair.key)
         self._restore_photo_decisions()
         self.current_key = None
-        self._aspect_cache.clear()
+        # Retain dimensions for photos that also appear in the collection view.
 
     def _photo_project(self, pair):
         if self.session_key == "collection" and pair is not None:
@@ -179,6 +190,7 @@ class ProjectSessionMixin:
         if project is None:
             return
         was_collection = self._sidebar_selection == "collection"
+        self._quick_access_active = False
         self._sidebar_selection = "folder"
         if project_id == self.project_id:
             if was_collection:
@@ -199,6 +211,7 @@ class ProjectSessionMixin:
 
     def _open_unbound_folder(self, project: dict, *, record_history: bool = True, source_pairs=None):
         self._reset_color_index()
+        self._quick_access_active = False
         self._sidebar_selection = "folder"
         self.save_timer.stop()
         self._save_session()
@@ -256,9 +269,14 @@ class ProjectSessionMixin:
                 raise ValueError("目标文件夹已不存在，请重新选择关联位置")
             if target.get("folder"):
                 raise ValueError("该文件夹已经关联照片目录")
-        existing = self.store.project_for_folder(folder)
-        if existing is not None:
-            raise ValueError(f'该目录已关联至“{existing["name"]}”，请选择其他文件夹')
+        for existing in self.store.projects():
+            source = existing.get("folder")
+            if not source:
+                continue
+            linked = Path(source).resolve()
+            if folder.is_relative_to(linked) or linked.is_relative_to(folder):
+                raise ValueError(
+                    f'所选目录与“{existing["name"]}”的照片目录重叠，无法重复导入或关联，请选择其他文件夹')
         return folder
 
     def _finish_import(self, prepared):
@@ -327,6 +345,20 @@ class ProjectSessionMixin:
         folder = project.get("folder")
         return project if not folder or Path(folder).is_dir() else None
 
+    def _show_folder_switcher(self):
+        self.folder_switch_panel.set_folders(self.store.projects(), self.project_id)
+        self.folder_switch_panel.open()
+
+    def _open_folder_from_switcher(self, project_id):
+        self.folder_switch_panel.accept()
+        item = self._project_items.get(project_id)
+        if item is None:
+            return
+        if self.project_list.currentItem() is item:
+            self._activate_project_from_list(item, None)
+        else:
+            self.project_list.setCurrentItem(item)
+
     def _update_folder_navigation(self):
         if not hasattr(self, "folder_back_button") or self.folder_back_button is None:
             return
@@ -394,6 +426,7 @@ class ProjectSessionMixin:
         self.save_timer.stop()
         self._save_session()
         self._sidebar_selection = "folder"
+        self._quick_access_active = False
         project = self.store.add_project(project_folder, parent_id)
         if project["id"] != self.project_id:
             self.filters.clear()
@@ -407,7 +440,7 @@ class ProjectSessionMixin:
         self._reset_color_index()
         self.pairs = pairs
         self.pairs_by_key = {pair.key: pair for pair in pairs}
-        self._aspect_cache.clear()
+        self._aspect_cache.update(prepared.aspects)
         self.folder_section.hide()
         self.folder_content_heading.hide()
         self.filmstrip.show()

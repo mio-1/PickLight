@@ -202,6 +202,10 @@ class TitleBar(_TitleBarDragMixin, QFrame):
         background = ui_color("#18191c")
         if backdrop:
             background.setAlpha(235)
+        if self.owner._large_screen_active():
+            painter.fillRect(self.rect(), background)
+            painter.end()
+            return
         left = self.owner.title_left.width() if hasattr(self.owner, "title_left") else 230
         if hasattr(self.owner, "title_left") and self.owner.title_left.isHidden():
             left = 0

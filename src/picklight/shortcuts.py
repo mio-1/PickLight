@@ -30,6 +30,8 @@ SHORTCUTS = (
     Shortcut("view.grid", "显示", "返回网格／取消文件夹拖动", "Esc"),
     Shortcut("view.fullscreen", "显示", "切换全屏", "F11"),
     Shortcut("search.photos", "查找", "搜索照片", "Ctrl+F"),
+    Shortcut("photo.rename", "浏览", "重命名照片", "F2", "gallery"),
+    Shortcut("photo.grayscale", "显示", "黑白预览", "Ctrl+Alt+G"),
     Shortcut("folder.new", "文件夹", "新建文件夹", "Ctrl+Shift+N", "folder"),
     Shortcut("folder.child", "文件夹", "新建子文件夹", "Alt+N", "folder"),
     Shortcut("folder.rename", "文件夹", "重命名文件夹", "F2", "folder"),

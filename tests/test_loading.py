@@ -208,3 +208,25 @@ class LoaderTests(unittest.TestCase):
         with patch.object(loader.hero_pool, "submit") as submit:
             loader.request(Path("after-close"), 2200)
             submit.assert_not_called()
+
+    def test_selected_thumbnail_bypasses_queued_gallery_thumbnails(self):
+        loader = self.loader(PreviewLoader)
+        release, gallery_started = Event(), Event()
+        self.addCleanup(release.set)
+        received = []
+        loader.ready.connect(lambda path, width, image: received.append(path))
+
+        def decode(path, width, color_mode="srgb"):
+            if str(path).startswith("gallery"):
+                gallery_started.set()
+                release.wait(3)
+            return QImage(4, 4, QImage.Format.Format_RGB32)
+
+        with patch("picklight.preview.decode", side_effect=decode):
+            loader.request(Path("gallery-1"), 420)
+            loader.request(Path("gallery-2"), 420)
+            self.wait_for(gallery_started.is_set)
+            loader.request(Path("selected"), 420)
+            loader.request_current(Path("selected"))
+            self.wait_for(lambda: "selected" in received)
+            self.assertFalse(release.is_set())

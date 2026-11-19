@@ -75,6 +75,73 @@ class ImportPreflightTests(unittest.TestCase):
                 load.assert_not_called()
                 begin.assert_not_called()
 
+    def test_descendants_are_rejected_before_import_or_binding(self):
+        w = self.window
+        old = w.store.add_project(self.source)
+        target = w.store.add_folder("待关联")
+        child = self.source / "子目录"
+        nested = child / "更深一层"
+        nested.mkdir(parents=True)
+        before = deepcopy(w.store.data)
+        for folder in (child, nested):
+            for options in ({}, {"bind_to_id": target["id"]}):
+                with self.subTest(folder=folder, options=options), \
+                        patch("picklight.projects.QFileDialog.getExistingDirectory", return_value=str(folder)), \
+                        patch("picklight.projects.QMessageBox.warning") as warning, \
+                        patch.object(w.import_loader, "load") as load, \
+                        patch.object(w.import_progress, "begin") as begin:
+                    w.choose_project(**options)
+                    warning.assert_called_once()
+                    self.assertIn(old["name"], warning.call_args.args[2])
+                    load.assert_not_called()
+                    begin.assert_not_called()
+                    self.assertIsNone(w._pending_import)
+                    self.assertEqual(w.store.data, before)
+
+    def test_ancestor_is_rejected_before_import_or_binding(self):
+        w = self.window
+        child = self.source / "子目录"
+        child.mkdir()
+        old = w.store.add_project(child)
+        target = w.store.add_folder("待关联")
+        before = deepcopy(w.store.data)
+        for options in ({}, {"bind_to_id": target["id"]}):
+            with self.subTest(options=options), \
+                    patch("picklight.projects.QFileDialog.getExistingDirectory", return_value=str(self.source)), \
+                    patch("picklight.projects.QMessageBox.warning") as warning, \
+                    patch.object(w.import_loader, "load") as load, \
+                    patch.object(w.import_progress, "begin") as begin:
+                w.choose_project(**options)
+                warning.assert_called_once()
+                self.assertIn(old["name"], warning.call_args.args[2])
+                load.assert_not_called()
+                begin.assert_not_called()
+                self.assertIsNone(w._pending_import)
+                self.assertEqual(w.store.data, before)
+
+    def test_similar_directory_names_do_not_block_unrelated_sources(self):
+        w = self.window
+        w.store.add_project(self.source)
+        sibling = self.root / (self.source.name + "备份")
+        sibling.mkdir()
+        self.assertEqual(w._validate_import_target(sibling, None, None), sibling.resolve())
+
+    def test_new_ancestor_binding_is_rechecked_before_commit(self):
+        w = self.window
+        child = self.source / "子目录"
+        child.mkdir()
+        prepared = prepare_project(child)
+        target = w.store.add_folder("待关联")
+        w._pending_import = (None, target["id"])
+        w.import_progress.begin()
+        w.store.add_project(self.source)
+        with patch("picklight.projects.QMessageBox.warning") as warning:
+            w._finish_import(prepared)
+        warning.assert_called_once()
+        self.assertIsNone(w.store.project_by_id(target["id"])["folder"])
+        self.assertIsNone(w.store.project_for_folder(child))
+        self.assertFalse(w.import_progress.isVisible())
+
     def test_concurrent_new_binding_is_rechecked_before_commit(self):
         w = self.window
         target = w.store.add_folder("待关联")

@@ -6,7 +6,7 @@
 [简体中文](README.md) | [English](docs/README_EN.md)
 
 ![Windows](https://img.shields.io/badge/Windows-0078D4?style=flat-square)
-![版本](https://img.shields.io/badge/version-0.1.0-blue?style=flat-square)
+![版本](https://img.shields.io/badge/version-0.1.1-blue?style=flat-square)
 [![许可证](https://img.shields.io/badge/license-MIT-orange?style=flat-square)](LICENSE)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)
 ![PySide6](https://img.shields.io/badge/PySide6-6-41CD52?style=flat-square&logo=qt&logoColor=white)
@@ -21,7 +21,8 @@ PickLight 用于浏览、筛选和标记照片，支持同名 JPG 与 RAW 自动
 
 - 网格、瀑布流与选片模式，支持缩放、旋转和 JPG / RAW 切换
 - 星级评分、保留与待删除标记，支持批量操作及组合筛选
-- 文件夹管理、多选和框选，以及可自定义的主题与快捷键
+- 文件夹树、快速访问、多选和框选，以及可自定义的主题与快捷键
+- 全屏浏览、黑白预览和可按 `Ctrl + 滚轮` 调整大小的瀑布流
 
 ### 工作区
 
@@ -68,6 +69,18 @@ powershell -ExecutionPolicy Bypass -File .\tools\setup-exiftool.ps1
 3. 按 `1`–`5` 评分、`P` 标记保留、`X` 标记待删除，再按评分和标记筛选
 
 快捷键可在偏好设置中修改。
+
+### 文件夹与自动导入
+
+左栏可展开文件夹树，并将常用文件夹添加到快速访问。顶部的切换文件夹入口支持搜索已关联文件夹。在“偏好设置 → 自动导入”开启监控后，关联目录中新出现的照片及子文件夹内的照片会自动纳入原关联文件夹；不会为子文件夹新建左栏项目，也不会移动原始文件。关闭期间新增的照片会在重新开启后补入。
+
+### 全屏浏览
+
+选中照片后，点击预览区或预览工具栏的“全屏浏览”按钮，可在当前软件窗口内放大浏览，并保留标题栏、窗口大小和位置。进入全屏浏览时照片会按比例完整适配画布，不会超出画布；底部保留可直接切图的缩略图条。按 `Esc` 或点击左上角返回按钮恢复原视图。预览工具栏中“全屏浏览”左侧的“适应大小”按钮可恢复画布居中。照片放大到超出画布时，右下角显示当前位置小窗。`F11` 单独切换系统全屏。
+
+### 瀑布流
+
+瀑布流缩略图可缩至更小尺寸，显示更多列。在照片网格上按住 `Ctrl` 滚动滚轮，可调整缩略图大小。
 
 ### 开发与构建
 

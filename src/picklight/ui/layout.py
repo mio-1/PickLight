@@ -55,6 +55,7 @@ class WindowLayoutMixin:
         self.splitter.addWidget(viewer)
         self.splitter.splitterMoved.connect(self._workspace_splitter_moved)
         build_inspector(self)
+        self._build_organization_ui()
         for index, stretch in enumerate((0, 1, 0)):
             self.splitter.setStretchFactor(index, stretch)
         middle_width = max(1, self.width() - self._expanded_sidebar_width - self._inspector_width

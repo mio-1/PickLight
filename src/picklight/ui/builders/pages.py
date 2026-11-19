@@ -19,13 +19,16 @@ from picklight.paths import asset_path
 from picklight.ui.common import label
 from picklight.ui.folders import FolderSectionToggle
 from picklight.ui.gallery import EmptyFolderIllustration, PhotoGrid, PhotoGridDelegate, PhotoGridHeader
-from picklight.viewer import LoupeCanvas
+from picklight.ui.large_screen import LargeScreenPage
 from picklight.ui.review_feedback import ReviewFeedback
 
 
 def build_pages(self, viewer_layout):
     self.center_stack = QStackedWidget()
     self.filmstrip = PhotoGrid()
+    self.filmstrip.set_hover_loader(self.loader)
+    self.filmstrip.zoomStepsRequested.connect(lambda steps: self.zoom_slider.setValue(
+        self.zoom_slider.value() + steps * self.zoom_slider.singleStep()))
     self.filmstrip.setObjectName("photoGrid")
     self.filmstrip.setViewMode(QListWidget.ViewMode.IconMode)
     photo_delegate = PhotoGridDelegate(self.filmstrip)
@@ -51,7 +54,8 @@ def build_pages(self, viewer_layout):
     self.filmstrip.currentRowChanged.connect(self._on_row_changed)
     self.filmstrip.itemClicked.connect(lambda _item: self._on_photo_selection_changed(show_single=True))
     self.filmstrip.itemSelectionChanged.connect(lambda: self._on_photo_selection_changed(show_single=True))
-    self.filmstrip.itemDoubleClicked.connect(lambda _item: self._show_loupe())
+    self.filmstrip.itemDoubleClicked.connect(self._photo_double_clicked)
+    self.filmstrip.middleClicked.connect(self._photo_middle_clicked)
     self.filmstrip.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
     self.filmstrip.customContextMenuRequested.connect(self._photo_context_menu)
     self._thumbnail_scroll_timer = QTimer(self)
@@ -105,15 +109,21 @@ def build_pages(self, viewer_layout):
     gallery_layout.addWidget(self.filmstrip, 1)
     self.folder_page = self.gallery_page
     self.center_stack.addWidget(self.gallery_page)
-    loupe_page = QWidget()
-    loupe_layout = QVBoxLayout(loupe_page)
-    loupe_layout.setContentsMargins(0, 0, 0, 0)
-    loupe_layout.setSpacing(8)
-    self.preview_canvas = LoupeCanvas()
-    self.preview_canvas.exitRequested.connect(self._show_grid)
+    loupe_page = LargeScreenPage(self.filmstrip, self.loader)
+    self.large_screen_page = loupe_page
+    self.preview_canvas = loupe_page.canvas
+    self.preview_canvas.exitRequested.connect(self._exit_photo_view)
     self.preview_canvas.zoomChanged.connect(self._sync_loupe_zoom)
+    self.preview_canvas.wheelNavigateRequested.connect(self.move_selection)
     self.image_zoom_slider.valueChanged.connect(self._set_loupe_zoom)
-    loupe_layout.addWidget(self.preview_canvas, 1)
+    loupe_page.exitRequested.connect(self._exit_large_screen)
+    loupe_page.previousRequested.connect(lambda: self.move_selection(-1))
+    loupe_page.nextRequested.connect(lambda: self.move_selection(1))
+    loupe_page.sourceRequested.connect(self._set_preview_source)
+    loupe_page.decisionRequested.connect(lambda state: self._set_photo_decision(state, toggle=True))
+    loupe_page.stars.ratingSelected.connect(self.set_rating)
+    loupe_page.autoAdvanceChanged.connect(self.review_auto_advance_button.setChecked)
+    self.review_auto_advance_button.toggled.connect(lambda: self._sync_large_screen())
     self.review_feedback = ReviewFeedback(self.preview_canvas)
     self.center_stack.addWidget(loupe_page)
     self.empty_page = QWidget()

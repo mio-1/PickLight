@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from bisect import bisect_left, bisect_right
 from PySide6.QtCore import QPoint, QSize, QTimer, Qt
+from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QListWidget
 
 from picklight.library import PhotoPair
@@ -63,7 +64,7 @@ class GalleryMixin:
             return
         target_width = self.zoom_slider.value() if hasattr(self, "zoom_slider") else DEFAULT_THUMBNAIL_WIDTH
         gap = 11
-        columns = max(1, min(7, (viewport_width - gap) // (target_width + gap)))
+        columns = max(1, min(24, (viewport_width - gap) // (target_width + gap)))
         self.gallery_header.setFixedWidth(viewport_width)
         self.gallery_header.layout().activate()
         header_height = (0 if self.folder_section.isHidden()
@@ -77,7 +78,7 @@ class GalleryMixin:
             self._schedule_visible_thumbnails()
             return
         self._grid_layout_key = layout_key
-        cell_width = max(100, (viewport_width - gap * (columns + 1)) // columns)
+        cell_width = max(88, (viewport_width - gap * (columns + 1)) // columns)
         image_width = cell_width - 6
         caption_space = 48
         self.thumbnail_size = QSize(image_width, round(image_width * 2 / 3))
@@ -155,6 +156,9 @@ class GalleryMixin:
         return () if self.folder_section.isHidden() else getattr(self, "_folder_cover_cards", {})
 
     def _request_visible_thumbnails(self):
+        if self._large_screen_active():
+            self.large_screen_page.strip.request_visible()
+            return
         if not self.visible:
             return
         padding = max(300, self.filmstrip.viewport().height() // 2)
@@ -188,9 +192,19 @@ class GalleryMixin:
         if item is None:
             return
         size = self._thumbnail_size_for_row(row)
-        signature = (size.width(), size.height())
+        signature = (size.width(), size.height(), self.grayscale_preview)
         if item.data(Qt.ItemDataRole.UserRole + 5) == signature:
             return
+        if self.grayscale_preview:
+            image = image.convertToFormat(QImage.Format.Format_Grayscale8)
         item.setIcon(thumbnail_icon(image, size))
         item.setData(Qt.ItemDataRole.UserRole + 5, signature)
         self._painted_thumbnail_rows.add(row)
+
+    def _refresh_grayscale_thumbnails(self):
+        for row in tuple(self._painted_thumbnail_rows):
+            if 0 <= row < len(self.visible):
+                image = self.loader.cached(self._filtered_display_path(self.visible[row]), 420)
+                if image is not None:
+                    self._paint_thumbnail(row, image)
+        self.large_screen_page.strip.viewport().update()

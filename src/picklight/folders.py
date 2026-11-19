@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from pathlib import Path
 
 from PySide6.QtCore import QSize, QTimer, Qt
 from PySide6.QtWidgets import (
+    QApplication,
     QDialog,
     QMenu,
     QTreeWidgetItem,
@@ -59,6 +61,18 @@ class FolderMixin:
                 parent.addChild(item)
             else:
                 self.project_list.addTopLevelItem(item)
+        pending = [self.project_list.topLevelItem(i)
+                   for i in range(self.project_list.topLevelItemCount())]
+        ordered = []
+        while pending:
+            item = pending.pop()
+            ordered.append(item)
+            pending.extend(item.child(i) for i in range(item.childCount()))
+        for item in reversed(ordered):
+            total = int(item.data(0, Qt.ItemDataRole.UserRole + 2) or 0)
+            total += sum(int(item.child(i).data(0, Qt.ItemDataRole.UserRole + 6) or 0)
+                         for i in range(item.childCount()))
+            item.setData(0, Qt.ItemDataRole.UserRole + 6, total)
         for project_id, item in items.items():
             item.setExpanded(project_id not in collapsed if first_render else
                              project_id in expanded if project_id in previous else True)
@@ -77,6 +91,99 @@ class FolderMixin:
             self._apply_folder_filter(self.folder_filter_edit.text())
         self.project_list.restore_folder_expansion(expansion_state)
         self._watch_source_folders()
+        monitor = getattr(self, "auto_import_monitor", None)
+        if monitor is not None:
+            monitor.configure(self.preferences.auto_import_enabled,
+                              [project["folder"] for project in projects if project.get("folder")],
+                              scan_now=False)
+
+    def _refresh_quick_access(self):
+        tree = self.quick_access_list
+        blocked = tree.blockSignals(True)
+        tree.clear()
+        folders = self.store.quick_access_folders()
+        query = self.folder_filter_edit.text().strip().casefold()
+        tree.filter_query = self.folder_filter_edit.text().strip()
+        for folder in folders:
+            source = self._project_items.get(folder["id"])
+            if source is None:
+                continue
+            item = QTreeWidgetItem([source.text(0)])
+            for role in range(int(Qt.ItemDataRole.UserRole), int(Qt.ItemDataRole.UserRole) + 6):
+                item.setData(0, role, source.data(0, role))
+            item.setToolTip(0, source.toolTip(0))
+            tree.addTopLevelItem(item)
+            item.setHidden(bool(query and query not in item.text(0).casefold()))
+        tree.blockSignals(blocked)
+        collapsed = bool(self.store.data.get("quick_access_collapsed", False))
+        visible_count = sum(not tree.topLevelItem(i).isHidden()
+                            for i in range(tree.topLevelItemCount()))
+        tree.setFixedHeight(min(5, visible_count) * 27)
+        tree.setVisible(self.preferences.sidebar_quick_access and bool(visible_count) and not collapsed)
+        self.quick_access_header.setVisible(self.preferences.sidebar_quick_access and bool(folders))
+        self.quick_access_label.setText(
+            f"快速访问 ({len(folders)})" if self.preferences.sidebar_counts else "快速访问")
+        self.quick_access_header.setFixedWidth(self.quick_access_label.sizeHint().width() + 43)
+        self._update_quick_access_header(self.quick_access_header.property("hovered") == "true")
+        self._sync_quick_access_selection()
+
+    def _update_quick_access_header(self, hovered):
+        collapsed = bool(self.store.data.get("quick_access_collapsed", False))
+        for widget in (self.quick_access_header, self.quick_access_label):
+            widget.setProperty("hovered", "true" if hovered else "false")
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+        self.quick_access_arrow.setPixmap(folder_triangle_icon(not collapsed).pixmap(QSize(12, 12)))
+        self.quick_access_arrow.setVisible(hovered or collapsed)
+        self.quick_access_header.setToolTip("展开快速访问" if collapsed else "收起快速访问")
+
+    def _sync_quick_access_selection(self):
+        tree = self.quick_access_list
+        blocked = tree.blockSignals(True)
+        active = next((tree.topLevelItem(i) for i in range(tree.topLevelItemCount())
+                       if getattr(self, "_quick_access_active", False) and
+                       self._sidebar_selection == "folder" and
+                       tree.topLevelItem(i).data(0, Qt.ItemDataRole.UserRole) == self.project_id), None)
+        tree.setCurrentItem(active)
+        if active is None:
+            tree.clearSelection()
+        else:
+            self.project_list.clearSelection()
+        tree.blockSignals(blocked)
+
+    def _select_folder_entry(self, quick_access):
+        self._quick_access_active = quick_access
+        self._sync_quick_access_selection()
+
+    def _toggle_quick_access_section(self):
+        self.store.data["quick_access_collapsed"] = not bool(
+            self.store.data.get("quick_access_collapsed", False))
+        self.store.save()
+        self._refresh_quick_access()
+
+    def _activate_quick_access(self, current, _previous):
+        if current is None:
+            return
+        project_id = current.data(0, Qt.ItemDataRole.UserRole)
+        source = self._project_items.get(project_id)
+        if source is not None:
+            # Use the ordinary folder route, including missing-source checks.
+            self._activate_project_from_list(source, None)
+            source = self._project_items.get(project_id)
+            if source is None:
+                return
+            blocked = self.project_list.blockSignals(True)
+            self.project_list.setCurrentItem(source)
+            self.project_list.blockSignals(blocked)
+            self._select_folder_entry(True)
+
+    def _show_quick_access_menu(self, point):
+        item = self.quick_access_list.itemAt(point)
+        if item is None:
+            return
+        menu = self._build_folder_menu(item.data(0, Qt.ItemDataRole.UserRole))
+        menu.exec(self.quick_access_list.viewport().mapToGlobal(point))
+        menu.deleteLater()
 
     def _set_folder_header_hover(self, hovered: bool):
         # The add button appears when the folder section is hovered. The pill
@@ -100,6 +207,8 @@ class FolderMixin:
 
     def _toggle_folder_section(self):
         self._folder_section_collapsed = not self._folder_section_collapsed
+        if self._folder_section_collapsed:
+            self.folder_filter_edit.clearFocus()
         self.project_list.setVisible(not self._folder_section_collapsed)
         self._update_folder_header_arrow()
         self.store.data["folder_section_collapsed"] = self._folder_section_collapsed
@@ -138,6 +247,7 @@ class FolderMixin:
             self.project_list.blockSignals(False)
         self.project_list.doItemsLayout()
         self.project_list.viewport().update()
+        self._refresh_quick_access()
 
     def _save_folder_expansion(self, _item: QTreeWidgetItem | None):
         if self.project_list._drag_expansion_state is not None:
@@ -151,7 +261,7 @@ class FolderMixin:
         self.store.data["collapsed_folder_ids"] = collapsed
         self.store.save()
 
-    def _update_folder_inspector(self, project: dict, pairs=None):
+    def _update_folder_inspector(self, project: dict, pairs=None, *, source_pairs=None):
         if self.folder_inspector_name.property("projectId") != project["id"]:
             self._save_folder_name()
             self._save_folder_description()
@@ -161,19 +271,52 @@ class FolderMixin:
         self.folder_inspector_name.setText(str(project["name"]))
         self.folder_inspector_description.setText(str(project.get("description") or ""))
         self.folder_inspector_link.set_path(project.get("folder"))
-        own_pairs = pairs if pairs is not None else (self.pairs if project["id"] == self.project_id else [])
-        paths = [path for pair in own_pairs for path in (pair.jpg, pair.raw) if path]
+        paths = {}
+        scanned = []
+        scanned_pairs = {}
+        sources = [folder for folder in self.store.folder_branch(project["id"])
+                   if folder.get("folder")]
+        sources.sort(key=lambda folder: len(Path(folder["folder"]).parts))
+        for folder in sources:
+            root = Path(folder["folder"]).resolve()
+            if any(root.is_relative_to(parent) for parent in scanned):
+                continue
+            try:
+                if folder["id"] == project["id"] and pairs is not None:
+                    photos = pairs
+                elif folder["id"] == self.project_id:
+                    photos = self.pairs
+                elif source_pairs is not None and str(root) in source_pairs:
+                    photos = source_pairs[str(root)]
+                else:
+                    photos = scan_pairs(root)
+            except (OSError, ValueError):
+                continue
+            scanned.append(root)
+            scanned_pairs[str(root)] = photos
+            for pair in photos:
+                for path in (pair.jpg, pair.raw):
+                    if path is not None:
+                        paths[self.store.photo_path_key(path)] = path
         self.folder_inspector_count.setText(str(len(paths)))
-        size = sum(path.stat().st_size for path in paths if path.exists())
+        size = 0
+        for path in paths.values():
+            try:
+                size += path.stat().st_size
+            except OSError:
+                continue
         self.folder_inspector_size.setText(self._folder_size_text(size))
         created = project.get("created_at") or project.get("imported_at")
         self.folder_inspector_date.setText(str(created).replace("-", "/") if created else "—")
+        return scanned_pairs
 
     def _show_folder_overview(self, project: dict, *, source_pairs=None):
         own_pairs = (self.pairs if project["id"] == self.project_id and project.get("folder") else [])
-        self._update_folder_inspector(project, own_pairs)
-        children = [child for child in self.store.projects()
+        scanned_pairs = self._update_folder_inspector(project, own_pairs, source_pairs=source_pairs)
+        projects = self.store.projects()
+        children = [child for child in projects
                     if child.get("parent_id") == project["id"]]
+        child_counts = Counter(folder.get("parent_id") for folder in projects)
         self._folder_cover_cards = {}
         self._folder_cards = []
         self._folder_cards_layout_key = None
@@ -195,19 +338,29 @@ class FolderMixin:
             project["photo_count"] = len(own_pairs)
         for index, child in enumerate(children):
             try:
-                child_pairs = ((source_pairs.get(str(Path(child["folder"]).resolve()), [])
-                                if source_pairs is not None else scan_pairs(Path(child["folder"])))
-                               if child.get("folder") else [])
+                child_pairs = []
+                if child.get("folder"):
+                    root = Path(child["folder"]).resolve()
+                    if source_pairs is not None:
+                        child_pairs = source_pairs.get(str(root), [])
+                    else:
+                        child_pairs = scanned_pairs.get(str(root))
+                        if child_pairs is None:
+                            child_pairs = scan_pairs(root)
             except (OSError, ValueError):
                 child_pairs = []
             if child.get("photo_count") != len(child_pairs):
                 child["photo_count"] = len(child_pairs)
                 counts_changed = True
             count = len(child_pairs)
-            child_count = sum(folder.get("parent_id") == child["id"]
-                              for folder in self.store.projects())
+            child_count = child_counts[child["id"]]
             self._folder_card_pairs[child["id"]] = child_pairs
-            cover = child_pairs[0].display_path if child_pairs else None
+            saved_cover = child.get("cover_path")
+            cover = next((pair.display_path for pair in child_pairs
+                          if saved_cover and self.store.photo_path_key(pair.display_path)
+                          == self.store.photo_path_key(Path(saved_cover))), None)
+            if cover is None:
+                cover = child_pairs[0].display_path if child_pairs else None
             card = FolderCard(child, count, cover, child_count)
             card.clicked.connect(self._select_folder_card)
             card.activated.connect(self._open_folder_card)
@@ -356,6 +509,13 @@ class FolderMixin:
         if project_id == self.project_id and not self.project_folder:
             self.folder_inspector_name.setText(str(self.store.project_by_id(project_id)["name"]))
 
+    def _project_item_double_clicked(self, item: QTreeWidgetItem, _column: int):
+        if self.preferences.sidebar_double_click_action == "rename":
+            self._rename_project_item(item)
+            return
+        expanded = not item.isExpanded()
+        item.setExpanded(expanded)
+
     def _project_item_renamed(self, item: QTreeWidgetItem, _column: int):
         project_id = item.data(0, Qt.ItemDataRole.UserRole)
         project = self.store.project_by_id(project_id)
@@ -377,6 +537,8 @@ class FolderMixin:
                 card.setToolTip(name)
                 card.setAccessibleName(name)
                 card.update()
+
+        self._refresh_quick_access()
 
     def _build_folder_menu(self, project_id: str | None):
         menu = FolderContextMenu(self)
@@ -406,6 +568,10 @@ class FolderMixin:
         move.setEnabled(True)
         menu.addSeparator()
         add("重命名", "rename", "rename", "F2")
+        pinned = type(project.get("quick_access_order")) is int
+        action = menu.addAction("从快速访问移除" if pinned else "添加至快速访问")
+        action.setData("quick_access")
+        action.triggered.connect(lambda: self._folder_menu_command("quick_access", project_id))
         menu.addSeparator()
         current = add("展开/收起文件夹", "expand", "expand")
         current.setEnabled(bool(self._project_items.get(project_id) and
@@ -462,7 +628,11 @@ class FolderMixin:
             self._new_folder(parent_id=project.get("parent_id") if project else None,
                              use_selection=False)
         elif project is not None:
-            if command == "child":
+            if command == "quick_access":
+                self.store.set_quick_access(project_id,
+                                            type(project.get("quick_access_order")) is not int)
+                self._refresh_quick_access()
+            elif command == "child":
                 self._new_folder(parent_id=project_id, use_selection=False)
             elif command == "rename":
                 item = self._project_items.get(project_id)
@@ -513,6 +683,7 @@ class FolderMixin:
             item.setData(0, Qt.ItemDataRole.UserRole + 5, str(project.get("color") or ""))
             self.project_list.blockSignals(blocked)
             self.project_list.viewport().update()
+        self._refresh_quick_access()
 
     def _new_folder(self, parent_id: str | None = None, *, use_selection: bool = True):
         if parent_id is None and use_selection:
@@ -629,6 +800,8 @@ class FolderMixin:
         self.folder_delete_toast.show_deletion(
             str(project["name"]),
             lambda: self._undo_folder_deletion(deletion, expansion, previous_active))
+        if self.preferences.notification_sounds_enabled and self.preferences.notify_folder_delete_sound:
+            QApplication.beep()
 
     def _undo_folder_deletion(self, deletion, expansion, previous_active):
         try:

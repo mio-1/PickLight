@@ -82,7 +82,16 @@ class FilterMixin:
         if self.filters.path_contains == value:
             return
         self.filters.path_contains = value
-        self._filter_changed()
+        sender = self.sender()
+        if value and sender in (self.search_edit, self.compact_search_edit) and sender.hasFocus():
+            self._search_timer.start()
+        else:
+            self._filter_changed()
+
+    def _flush_photo_search(self):
+        if self._search_timer.isActive():
+            self._search_timer.stop()
+            self._apply_filter()
 
     def _set_search_scope(self, scope: str, checked: bool):
         if checked:
@@ -93,6 +102,8 @@ class FilterMixin:
             self._filter_changed()
 
     def _focus_photo_search(self):
+        if self._large_screen_active():
+            self._show_grid()
         if self.search_edit.isVisible():
             self.search_edit.setFocus()
             self.search_edit.selectAll()
@@ -101,6 +112,7 @@ class FilterMixin:
                 QPoint(self.search_toggle.width() - 200, self.search_toggle.height())))
 
     def _filter_changed(self):
+        self._search_timer.stop()
         self._apply_filter()
 
     def _clear_filters(self):
@@ -111,15 +123,17 @@ class FilterMixin:
         self._filter_changed()
 
     def _update_decision_ui(self):
+        self._sync_quick_access_selection()
         total = len(self.pairs)
         marked = sum(pair.key in self.marked for pair in self.pairs)
         rated = sum(self.ratings.get(pair.key, 0) > 0 for pair in self.pairs)
+        category = self._sidebar_selection == "collection"
         self.sidebar_nav["all"].set_state(
-            total, self._sidebar_selection == "collection" and not self.filters.active)
+            total, category and not self.filters.active)
         self.sidebar_nav["rated"].set_state(
-            rated, self._sidebar_selection == "collection" and
+            rated, category and
             self.filters.rating_min == 1 and self.filters.rating_max is None)
-        self.sidebar_nav["marked"].set_state(marked, self._sidebar_selection == "collection"
+        self.sidebar_nav["marked"].set_state(marked, category
                                             and self.filters.states == {"reject"})
         dim_rejected = not (self._sidebar_selection == "collection" and self.filters.states == {"reject"})
         if self.filmstrip.dim_rejected != dim_rejected:
@@ -132,9 +146,12 @@ class FilterMixin:
         self.reject_flag_button.setChecked(marked)
         self.keep_flag_button.setEnabled(self.current_key is not None)
         self.reject_flag_button.setEnabled(self.current_key is not None)
+        self.image_fit_button.setEnabled(self.current_key is not None)
+        self.preview_expand_button.setEnabled(self.current_key is not None)
         state = "reject" if marked else "keep" if self.current_key in self.kept else ""
         self.preview_canvas.set_decision_state(state)
         self.inspector_preview.set_decision_state(state)
+        self._sync_large_screen()
 
     def _matches_filter(self, pair: PhotoPair, except_facet=None, candidate_paths=None) -> bool:
         project = (self._photo_project(pair) if self.filters.path_contains and

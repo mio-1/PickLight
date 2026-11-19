@@ -6,7 +6,7 @@
 [简体中文](../README.md) | [English](README_EN.md)
 
 ![Windows](https://img.shields.io/badge/Windows-0078D4?style=flat-square)
-![Version](https://img.shields.io/badge/version-0.1.0-blue?style=flat-square)
+![Version](https://img.shields.io/badge/version-0.1.1-blue?style=flat-square)
 [![License](https://img.shields.io/badge/license-MIT-orange?style=flat-square)](../LICENSE)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)
 ![PySide6](https://img.shields.io/badge/PySide6-6-41CD52?style=flat-square&logo=qt&logoColor=white)
@@ -21,7 +21,8 @@ PickLight helps you browse, filter, and mark photos, and automatically pairs JPG
 
 - Grid, masonry, and culling mode with zoom, rotation, and JPG / RAW switching
 - Star ratings, keep and pending-deletion marks, batch operations, and combined filters
-- Folder management, multiple and drag selection, customizable themes and shortcuts
+- Folder tree, Quick Access, multiple and drag selection, customizable themes and shortcuts
+- Full-screen browsing, grayscale preview, and masonry thumbnail sizing with `Ctrl + wheel`
 
 ### Workspace
 
@@ -68,6 +69,18 @@ powershell -ExecutionPolicy Bypass -File .\tools\setup-exiftool.ps1
 3. Press `1`–`5` to rate, `P` to keep, or `X` to mark pending deletion, then filter by rating or mark.
 
 Shortcuts can be changed in Preferences.
+
+### Folders and automatic import
+
+Expand the folder tree in the sidebar and pin frequently used folders to Quick Access. Use the folder switcher in the top bar to search linked folders. When automatic import is enabled in Preferences, photos added to a linked directory or its new subfolders appear in the original linked folder. Subfolders do not become separate sidebar entries, and original files stay in place. Photos added while the setting is off appear after it is turned back on.
+
+### Full-screen browsing
+
+Select a photo and click Full-screen Browse in the preview toolbar to browse within the current app window, preserving its title bar, size, and position. The photo initially fits entirely within the canvas; the thumbnail strip remains for direct navigation. The Fit button to the left of Full-screen Browse restores a centered view in preview mode. When the photo extends beyond the canvas, a small navigator at the bottom right shows the visible area. Press `Esc` or use the top-left back button to restore the previous view. `F11` toggles system fullscreen independently.
+
+### Masonry view
+
+Masonry thumbnails can be made smaller to show more columns. Hold `Ctrl` while scrolling over the photo grid to adjust their size.
 
 ### Development and build
 

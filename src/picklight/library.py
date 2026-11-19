@@ -49,11 +49,9 @@ def scan_pairs(project_folder: Path) -> list[PhotoPair]:
         raise ValueError(f"工程文件夹不存在：{project_folder}")
     groups: dict[str, dict[str, list[Path]]] = defaultdict(lambda: {"jpg": [], "raw": []})
     for path in project_folder.rglob("*"):
-        if not path.is_file():
-            continue
         extension = path.suffix.casefold()
         kind = "jpg" if extension in JPEG_EXTENSIONS else "raw" if extension in RAW_EXTENSIONS else None
-        if kind:
+        if kind and path.is_file():
             groups[path.stem.casefold()][kind].append(path)
 
     result: list[PhotoPair] = []

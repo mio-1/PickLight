@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -153,6 +154,22 @@ class FolderUndoTests(unittest.TestCase):
         toast.close_button.click()
         self.assertIsNone(window.store.project_by_id(second["id"]))
         self.assertFalse(toast.isVisible())
+
+    def test_folder_deletion_sound_follows_notification_preferences(self):
+        window = self.window()
+        with patch("picklight.folders.QApplication.beep") as beep:
+            window.preferences = replace(window.preferences, notification_sounds_enabled=True,
+                                         notify_folder_delete_sound=True)
+            first = window.store.add_folder("With sound")
+            window._refresh_project_list()
+            window._remove_project_item(window._project_items[first["id"]])
+            beep.assert_called_once_with()
+
+            window.preferences = replace(window.preferences, notification_sounds_enabled=False)
+            second = window.store.add_folder("Silent")
+            window._refresh_project_list()
+            window._remove_project_item(window._project_items[second["id"]])
+            beep.assert_called_once_with()
 
     def test_undo_restores_source_branch_without_changing_photos(self):
         window = self.window()

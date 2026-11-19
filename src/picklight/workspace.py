@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from math import log
 
-from PySide6.QtCore import QEvent, QKeyCombination, QSignalBlocker, QTimer, Qt
+from PySide6.QtCore import QEvent, QKeyCombination, QPointF, QSignalBlocker, QTimer, Qt
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (QAbstractSpinBox, QApplication, QComboBox, QLineEdit,
                               QListWidget, QPlainTextEdit, QTextEdit, QWidget)
@@ -81,9 +81,13 @@ class WorkspaceMixin:
         self.filmstrip.select_all_shortcut = self.shortcuts["photo.select_all"]
         add("view.fullscreen", self.toggle_fullscreen)
         add("photo.toggle_reject", self._delete_from_focused_view)
-        add("view.toggle", self._toggle_view)
+        add("view.toggle", self._space_key_action)
         add("view.grid", self._escape_view)
         add("search.photos", self._focus_photo_search)
+        add("photo.rename", lambda: self._rename_photo_group(self._selected_photo_pairs()),
+            gallery=True, repeat=False)
+        add("photo.grayscale", lambda: self._set_grayscale_preview(not self.grayscale_preview),
+            repeat=False)
         self._folder_shortcuts = []
         for command in ("new", "child", "rename", "expand_all"):
             action = add("folder." + command, lambda checked=False, value=command: self._folder_menu_command(
@@ -98,12 +102,17 @@ class WorkspaceMixin:
             action.setShortcut(QKeySequence(self.shortcuts[command]))
         self.filmstrip.select_all_shortcut = self.shortcuts["photo.select_all"]
 
+
     def _select_all_visible_photos(self):
         if self.center_stack.currentIndex() == 0:
             self.filmstrip.selectAll()
 
     def _escape_view(self):
-        if self.project_list._folder_drag_active:
+        if self.isFullScreen():
+            self.toggle_fullscreen()
+        elif self._large_screen_active():
+            self._exit_large_screen()
+        elif self.project_list._folder_drag_active:
             self.project_list.finish_folder_drag(cancel=True)
         else:
             self._show_grid()
@@ -115,6 +124,8 @@ class WorkspaceMixin:
             self.toggle_mark()
 
     def _show_grid(self):
+        if self._large_screen_active():
+            self._exit_large_screen(restore_view=False)
         self.review_feedback.dismiss()
         if self._sidebar_selection != "folder":
             self.folder_section.hide()
@@ -150,7 +161,8 @@ class WorkspaceMixin:
         self._adapt_viewer_toolbar()
         self._update_loupe_navigation()
         self.preview_canvas.fit_to_canvas()
-        QTimer.singleShot(0, self.preview_canvas.fit_to_canvas)
+        QTimer.singleShot(0, lambda: self.preview_canvas.fit_to_canvas()
+                          if self.preview_canvas.fitted else None)
         self.preview_canvas.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _update_loupe_navigation(self):
@@ -161,6 +173,7 @@ class WorkspaceMixin:
             self.file_label.setToolTip(path.name if path else "")
         self.previous_button.setEnabled(row > 0)
         self.next_button.setEnabled(0 <= row < len(self.visible) - 1)
+        self._sync_large_screen()
 
     def _sync_loupe_zoom(self, zoom):
         value = round(log(max(0.05, min(8.0, zoom)) / 0.05) / log(160) * 1000)
@@ -232,6 +245,17 @@ class WorkspaceMixin:
         else:
             self._show_grid()
 
+    def _space_key_action(self):
+        if self.preferences.space_key_action == "preview":
+            self._toggle_view()
+        elif self.center_stack.currentIndex() == 0:
+            bar = self.filmstrip.verticalScrollBar()
+            bar.setValue(min(bar.maximum(), bar.value() + bar.pageStep()))
+        else:
+            self.preview_canvas.pan += QPointF(0, -self.preview_canvas.height() * 0.8)
+            self.preview_canvas.fitted = False
+            self.preview_canvas._changed(zoom_changed=False)
+
     def _update_toolbar_folder_title(self):
         if self.center_stack.currentIndex() == 1:
             self._update_loupe_navigation()
@@ -246,6 +270,8 @@ class WorkspaceMixin:
         self.file_label.setToolTip(self._filter_title())
 
     def _show_empty(self, *, preserve_details=False):
+        if self._large_screen_active():
+            self._exit_large_screen(restore_view=False)
         if not self.store.projects() and self._sidebar_selection != "collection":
             self._sidebar_selection = "collection"
             self.filters.clear()

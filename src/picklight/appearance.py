@@ -39,11 +39,15 @@ def ui_color(value):
     v = (r + g + b) / 3
     if is_light():
         v = min(255, (267 if _effective == "light" else 247) - v * .92)
-        return QColor(round(v), round(v), round(v), a)
-    shifts = {"gray": (24, 24, 24), "blue": (17, 20, 37), "purple": (26, 17, 34)}
+        tint = (-2, -1, 1) if _effective == "light" else (2, 3, 5)
+        return QColor(*(max(0, min(255, round(v + offset))) for offset in tint), a)
+    # Eagle's six base surfaces: dark #18191c, gray #37383c,
+    # blue #0d1630 and purple #1c1424 (light variants above).
+    shifts = {"gray": (31, 31, 32), "blue": (-11, -3, 20), "purple": (4, -5, 8)}
     if v < 128:
         dr, dg, db = shifts.get(_effective, (0, 0, 0))
-        return QColor(min(255, r + dr), min(255, g + dg), min(255, b + db), a)
+        return QColor(max(0, min(255, r + dr)), max(0, min(255, g + dg)),
+                      max(0, min(255, b + db)), a)
     return color
 
 

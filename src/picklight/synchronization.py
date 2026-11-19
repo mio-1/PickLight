@@ -20,6 +20,7 @@ class SourceSyncMixin:
             snapshot.changed |= previous.changed
             snapshot.renamed = previous.renamed | snapshot.renamed
             snapshot.ratings = previous.ratings | snapshot.ratings
+            snapshot.imported += previous.imported
         self._pending_source_update = snapshot
         self._apply_pending_source_update()
 
@@ -44,7 +45,7 @@ class SourceSyncMixin:
         # Explicit renames also preserve selection before the monitor's first scan.
         hints = getattr(self, "_photo_rename_hints", {})
         applied = {old: new for old, new in hints.items()
-                   if old not in snapshot.files and new in snapshot.files}
+                   if new in snapshot.files and (old not in snapshot.files or old in snapshot.changed)}
         snapshot.renamed.update(applied)
         self._photo_rename_hints = {old: new for old, new in hints.items() if old not in applied}
         key = self.store.photo_path_key
@@ -59,27 +60,32 @@ class SourceSyncMixin:
             state = "reject" if pair.key in self.marked else "keep" if pair.key in self.kept else ""
             decisions.update({key(path): state for path in (pair.jpg, pair.raw) if path})
         renamed = {key(old): new for old, new in snapshot.renamed.items()}
-        for old, new in renamed.items():
-            if old in decisions:
-                value = decisions[old]
-                decisions[key(new)] = value
-                decisions[old] = ""
-                stored = self.store.data.setdefault("photo_decisions", {})
-                stored[key(new)] = value
-                stored[old] = ""
+        migrated_decisions = {key(new): decisions[old] for old, new in renamed.items() if old in decisions}
+        stored = self.store.data.setdefault("photo_decisions", {})
+        for old in renamed:
+            decisions[old] = ""
+            stored[old] = ""
+        decisions.update(migrated_decisions)
+        stored.update(migrated_decisions)
 
         def moved(path):
+            if str(path) in applied:
+                return key(applied[str(path)])
+            original = path
             seen = set()
             while key(path) in renamed and key(path) not in seen:
                 seen.add(key(path))
                 path = renamed[key(path)]
+            if key(path) in seen:
+                return key(renamed[key(original)])
             return key(path)
 
         selected_paths = list(dict.fromkeys(moved(path) for path in selected_paths))
         for loader in (self.loader, self.details_loader, self.palette_loader):
             loader.invalidate(snapshot.changed)
         self._reset_color_index()
-        self._aspect_cache.clear()
+        for path in snapshot.changed:
+            self._aspect_cache.pop(str(path), None)
         expansion = self.project_list.folder_expansion_state()
         scroll = self.filmstrip.verticalScrollBar().value()
         mode = self.center_stack.currentIndex()
@@ -148,5 +154,10 @@ class SourceSyncMixin:
         if self.session_key is None:
             self.store.save()
         self._on_photo_selection_changed()
+        if (snapshot.imported and self.preferences.notification_popups_enabled
+                and self.preferences.notify_auto_import):
+            self.statusBar().show()
+            self.statusBar().showMessage(f"自动纳入 {snapshot.imported} 个新文件", 3500)
+            QTimer.singleShot(3600, self.statusBar().hide)
         QTimer.singleShot(0, lambda: self.filmstrip.verticalScrollBar().setValue(scroll)
                           if not self.loader.closed else None)

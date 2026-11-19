@@ -97,3 +97,33 @@ class CollectionOverviewTests(unittest.TestCase):
         self.assertTrue(w.sidebar_nav["all"].active)
         self.assertFalse(w.filters.active)
         self.assert_summary("全部", 0, 0)
+
+    def test_folder_summary_includes_descendants_without_selecting_them(self):
+        w = self.window
+        source = self.photos()
+        parent = w.store.add_folder("照片")
+        nested = w.store.add_folder("旅行", parent["id"])
+        child = w.store.project_by_id(w.project_id)
+        w.store.move_project(child["id"], nested["id"])
+        expected = sum(path.stat().st_size for path in source.iterdir())
+
+        w._open_unbound_folder(parent)
+        self.assertEqual(w.folder_inspector_count.text(), "2")
+        self.assertEqual(w.folder_inspector_size.text(), w._folder_size_text(expected))
+        self.assertEqual(w.project_id, parent["id"])
+        w._select_folder_card(nested["id"])
+        self.assertEqual(w.folder_inspector_count.text(), "2")
+        self.assertEqual(w.folder_inspector_size.text(), w._folder_size_text(expected))
+
+    def test_folder_summary_does_not_double_count_overlapping_sources(self):
+        w = self.window
+        source = self.photos()
+        parent = w.store.project_by_id(w.project_id)
+        nested = source / "nested"
+        nested.mkdir()
+        (nested / "three.jpg").write_bytes((source / "one.jpg").read_bytes())
+        w.store.add_project(nested, parent["id"])
+        self.assertTrue(w.open_project(source))
+        expected = sum(path.stat().st_size for path in source.rglob("*.jpg"))
+        self.assertEqual(w.folder_inspector_count.text(), "3")
+        self.assertEqual(w.folder_inspector_size.text(), w._folder_size_text(expected))

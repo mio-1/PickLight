@@ -8,7 +8,7 @@ import os
 
 from PySide6.QtCore import QFileSystemWatcher, QObject, QTimer, Signal
 
-from picklight.library import JPEG_EXTENSIONS, RAW_EXTENSIONS, scan_pairs
+from picklight.library import JPEG_EXTENSIONS, RAW_EXTENSIONS, PhotoPair, scan_pairs
 from picklight.ui.graphics import safe_rating
 from picklight.file_access import file_stamp
 
@@ -21,10 +21,12 @@ class SourceSnapshot:
     changed: set
     renamed: dict
     ratings: dict
+    imported: int = 0
 
 
 def scan_sources(roots, previous, forced, stop):
     files, pairs, directories = {}, {}, set()
+    scannable = []
     extensions = JPEG_EXTENSIONS | RAW_EXTENSIONS | {".xmp"}
     for source in roots:
         if stop.is_set():
@@ -53,7 +55,7 @@ def scan_sources(roots, previous, forced, stop):
                             files[str(path)] = file_stamp(path)
                         except FileNotFoundError:
                             continue
-            pairs[source] = scan_pairs(root)
+            scannable.append((source, root))
         except (OSError, ValueError):
             # A temporarily inaccessible source must not look like an empty directory.
             prefix = os.path.normcase(str(root)) + os.sep
@@ -61,6 +63,17 @@ def scan_sources(roots, previous, forced, stop):
                           if os.path.normcase(path).startswith(prefix)})
     changed = {path for path in files.keys() | previous.keys()
                if files.get(path) != previous.get(path)} | set(forced)
+    if not changed:
+        return SourceSnapshot(files, pairs, directories, set(), {}, {})
+    # Polling only needs file stamps and watched directories. Re-pairing every
+    # source on an unchanged tick can recursively traverse large libraries twice.
+    for source, root in scannable:
+        if stop.is_set():
+            return None
+        try:
+            pairs[source] = scan_pairs(root)
+        except (OSError, ValueError):
+            pass
     old_ids, new_ids = {}, {}
     for table, paths, values in ((old_ids, previous.keys() - files.keys(), previous),
                                  (new_ids, files.keys() - previous.keys(), files)):
@@ -106,6 +119,9 @@ class SourceMonitor(QObject):
         self.stop = Event()
         self.roots = ()
         self.files = {}
+        self.accept_new = True
+        self._accepted_files = set()
+        self._initialized_roots = set()
         self._forced = set()
         self._current = set()
         self._rating_retries = {}
@@ -120,6 +136,7 @@ class SourceMonitor(QObject):
         if self.closed or roots == self.roots:
             return
         self.roots = roots
+        self._initialized_roots.intersection_update(roots)
         self._rating_retries.clear()
         self._generation += 1
         self._schedule()
@@ -159,6 +176,16 @@ class SourceMonitor(QObject):
         self.debounce.stop()
         self.scan()
 
+    def set_auto_import(self, enabled):
+        enabled = bool(enabled)
+        if self.accept_new == enabled:
+            return
+        self.accept_new = enabled
+        if enabled:
+            # Rebuild pairs even if file stamps have not changed since the
+            # files were first seen while automatic inclusion was disabled.
+            self.refresh(self.files)
+
     def scan(self):
         if self.closed or not self.roots:
             return
@@ -181,6 +208,30 @@ class SourceMonitor(QObject):
         except Exception:
             result = None
         if generation == self._generation and result is not None:
+            if self.accept_new:
+                result.imported = sum(
+                    1 for path in result.files.keys() - self._accepted_files
+                    if Path(path).suffix.casefold() in JPEG_EXTENSIONS | RAW_EXTENSIONS
+                    and any(Path(path).is_relative_to(Path(root))
+                            for root in self._initialized_roots))
+            for root in set(self.roots) - self._initialized_roots:
+                root_path = Path(root)
+                self._accepted_files.update(
+                    path for path in result.files if Path(path).is_relative_to(root_path))
+            self._initialized_roots.update(self.roots)
+            self._accepted_files.update(new for old, new in result.renamed.items()
+                                        if old in self._accepted_files)
+            if self.accept_new:
+                self._accepted_files.update(result.files)
+            else:
+                for source, pairs in result.pairs.items():
+                    visible = []
+                    for pair in pairs:
+                        jpg = pair.jpg if pair.jpg and str(pair.jpg) in self._accepted_files else None
+                        raw = pair.raw if pair.raw and str(pair.raw) in self._accepted_files else None
+                        if jpg or raw:
+                            visible.append(PhotoPair(pair.key, jpg, raw, pair.conflict))
+                    result.pairs[source] = visible
             self.files = result.files
             self._set_watches(result.directories)
             for path, (_, failed) in result.ratings.items():

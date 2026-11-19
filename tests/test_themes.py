@@ -97,7 +97,8 @@ class ThemeTests(unittest.TestCase):
             assets = root / "assets"
             github = assets / "themes" / "github"
             github.mkdir(parents=True)
-            for name in ("picklight.ico", "picklight.png"):
+            for name in ("picklight.ico", "picklight.png",
+                         "preferences-radio-checked.svg", "preferences-radio-unchecked.svg"):
                 (assets / name).write_bytes(b"branding")
             (assets / "private-art.svg").write_text(SVG)
             (github / "theme.json").write_text(json.dumps({
@@ -110,7 +111,9 @@ class ThemeTests(unittest.TestCase):
             (assets / "themes" / "private").mkdir()
             staged = stage_assets(root)
             files = {path.relative_to(staged).as_posix() for path in staged.rglob("*") if path.is_file()}
-            self.assertEqual(files, {"picklight.ico", "picklight.png", "themes/catalog.json",
+            self.assertEqual(files, {"picklight.ico", "picklight.png",
+                                     "preferences-radio-checked.svg", "preferences-radio-unchecked.svg",
+                                     "themes/catalog.json",
                                      "themes/github/theme.json", "themes/github/menu.svg"})
 
     def test_original_default_has_complete_renderable_assets_and_license(self):
@@ -141,7 +144,8 @@ class ThemeTests(unittest.TestCase):
             root = Path(directory)
             assets = root / "assets"
             assets.mkdir()
-            for name in ("picklight.ico", "picklight.png"):
+            for name in ("picklight.ico", "picklight.png",
+                         "preferences-radio-checked.svg", "preferences-radio-unchecked.svg"):
                 shutil.copy2(source / name, assets / name)
             shutil.copytree(source / "themes", assets / "themes")
             staged = stage_assets(root)

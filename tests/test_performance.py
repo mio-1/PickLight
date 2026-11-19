@@ -148,6 +148,18 @@ class WorkspacePerformanceTests(unittest.TestCase):
             left.assert_not_called()
             right.assert_not_called()
 
+    def test_typing_search_coalesces_filter_rebuilds(self):
+        edit = self.window.search_edit
+        edit.setFocus()
+        fired = []
+        self.window._search_timer.timeout.connect(lambda: fired.append(True))
+        with patch.object(self.window, "_resize_grid", wraps=self.window._resize_grid) as rebuild:
+            QTest.keyClicks(edit, "sample")
+            self.assertEqual(rebuild.call_count, 0)
+            QTest.qWait(180)
+            self.assertEqual(len(fired), 1)
+            self.assertLessEqual(rebuild.call_count, 2)
+
     def test_unchanged_layout_skips_all_row_positions_and_rebuild_still_works(self):
         window = self.window
         with patch.object(window.filmstrip, "setPositionForIndex", wraps=window.filmstrip.setPositionForIndex) as position:
@@ -188,6 +200,19 @@ class WorkspacePerformanceTests(unittest.TestCase):
             self.assertIsNone(window.current_image)
             window._preview_ready(str(path), 2200, image)
             self.assertEqual(window.current_image.cacheKey(), image.cacheKey())
+
+    def test_capture_details_wait_until_selected_thumbnail_is_ready(self):
+        window = self.window
+        path = window._current_preview_path()
+        window.loader.invalidate({str(path)})
+        image = QImage(180, 120, QImage.Format.Format_RGB32)
+        with patch.object(window.loader, "request_current") as small, \
+                patch.object(window.details_loader, "request") as details:
+            window._load_current_preview()
+            small.assert_called_once_with(path)
+            details.assert_not_called()
+            window._preview_ready(str(path), 420, image)
+            details.assert_called_once_with(path)
 
 
     def test_marking_reuses_thumbnail_and_coalesces_session_writes(self):

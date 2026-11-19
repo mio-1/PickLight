@@ -364,8 +364,11 @@ class WorkspaceRegressionTests(unittest.TestCase):
         for key in (source_id, child["id"]):
             self.assertFalse(picker.items[key].flags() & Qt.ItemFlag.ItemIsEnabled)
         picker.search.setText("Archive")
+        self.assertTrue(picker.search_clear_action.isVisible())
         self.assertFalse(picker.items[destination["id"]].isHidden())
         self.assertTrue(picker.items[source_id].isHidden())
+        picker.search_clear_action.trigger()
+        self.assertEqual(picker.search.text(), "")
 
         def choose_target(dialog):
             dialog.selected_parent_id = destination["id"]

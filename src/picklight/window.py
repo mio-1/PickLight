@@ -16,6 +16,7 @@ from picklight.filters import PhotoFilter
 from picklight.folders import FolderMixin
 from picklight.gallery import GalleryMixin
 from picklight.library import PhotoPair
+from picklight.large_screen import LargeScreenMixin
 from picklight.palette import ColorIndexLoader, PaletteLoader
 from picklight.photos import PhotoSelectionMixin
 from picklight.multi_selection import BatchRatingLoader, MultiSelectionMixin
@@ -24,16 +25,20 @@ from picklight.preview import PreviewLoader
 from picklight.projects import ProjectSessionMixin
 from picklight.session import SessionStore
 from picklight.source_monitor import SourceMonitor
+from picklight.auto_import import AutoImportMonitor
 from picklight.synchronization import SourceSyncMixin
 from picklight.ui.layout import WindowLayoutMixin
 from picklight.ui_motion import ScrollVisibilityManager
 from picklight.window_chrome import WindowChromeMixin
 from picklight.workspace import WorkspaceMixin
 from picklight.visual_filters import VisualFiltersMixin
+from picklight.organization_ui import OrganizationMixin
 
 
 class MainWindow(
+    OrganizationMixin,
     WindowLayoutMixin,
+    LargeScreenMixin,
     WorkspaceMixin,
     FolderMixin,
     ProjectSessionMixin,
@@ -88,10 +93,31 @@ class MainWindow(
         self.project_header_label.setText(
             f"文件夹 ({len(self.store.projects())})" if preferences.sidebar_counts else "文件夹")
         self.project_list.viewport().update()
+        self._refresh_quick_access()
+        self.project_header.setVisible(preferences.sidebar_folders)
+        self.project_list.parentWidget().setVisible(preferences.sidebar_folders)
+        self.filmstrip.ctrl_wheel_zoom = preferences.ctrl_wheel_zoom
+        self.filmstrip.hover_zoom_enabled = preferences.hover_zoom_enabled
+        if not preferences.hover_zoom_enabled:
+            self.filmstrip._hide_hover_preview()
+        self._apply_grayscale_preview(preferences.preview_grayscale)
+        self.preview_canvas.remember_zoom = preferences.remember_preview_zoom
+        self.preview_canvas.wheel_action = preferences.preview_wheel_action
+        self.auto_import_monitor.configure(
+            preferences.auto_import_enabled,
+            [project["folder"] for project in self.store.projects() if project.get("folder")])
+        self.source_monitor.set_auto_import(preferences.auto_import_enabled)
         for button in self.sidebar_nav.values():
             button.update()
         self._refresh_preference_effects()
         self.preview_canvas.set_gpu_enabled(preferences.gpu)
+
+    def _auto_import_folders(self, folders):
+        if not self.auto_import_monitor.roots:
+            return
+        # A linked folder owns its entire on-disk tree. New descendants belong
+        # to that same folder; creating a separate project here duplicates them.
+        self.source_monitor.refresh()
 
     def _refresh_preference_effects(self):
         from picklight.appearance import is_light
@@ -154,7 +180,8 @@ class MainWindow(
             else:
                 self.store.data.pop("icon_theme", None)
             raise
-        geometry = self.geometry()
+        large_screen = self._large_screen_active()
+        geometry = self.normalGeometry() if self.isFullScreen() or self.isMaximized() else self.geometry()
         maximized = self.isMaximized()
         fullscreen = self.isFullScreen()
         current_path = self._current_preview_path()
@@ -169,6 +196,8 @@ class MainWindow(
         scroll = self.filmstrip.verticalScrollBar().value()
         # Rebuild widgets so stored QIcons, SVG renderers and cursor pixmaps all refresh.
         replacement = MainWindow(restore_project=False)
+        replacement.large_screen_page.pin_action.setChecked(self.large_screen_page.pin_action.isChecked())
+        replacement.large_screen_page.strip_action.setChecked(self.large_screen_page.strip_action.isChecked())
         if current_path is not None and self.current_image is not None:
             replacement.loader.remember(str(current_path), 2200, self.current_image)
         replacement.setGeometry(geometry)
@@ -218,12 +247,16 @@ class MainWindow(
         replacement._folder_history_index = self._folder_history_index
         replacement._update_folder_navigation()
         QApplication.instance()._main_window = replacement
-        if fullscreen:
-            replacement.toggle_fullscreen()
-        elif maximized:
+        if maximized:
             replacement.showMaximized()
         else:
             replacement.show()
+        if large_screen:
+            replacement._enter_large_screen()
+            replacement._large_screen_restore = self._large_screen_restore
+        if fullscreen:
+            replacement.toggle_fullscreen()
+            replacement._fullscreen_restore_state = self._fullscreen_restore_state
         QTimer.singleShot(0, lambda: replacement.filmstrip.verticalScrollBar().setValue(scroll))
         self.close()
         return replacement
@@ -236,6 +269,7 @@ class MainWindow(
         self.resize(1360, 800)
         self.setMinimumSize(960, 620)
         self._resize_edges = Qt.Edge(0)
+        self._fullscreen_restore_state = Qt.WindowState.WindowNoState
         self._resize_start = QPoint()
         self._resize_geometry = self.geometry()
         self.store = SessionStore()
@@ -293,6 +327,7 @@ class MainWindow(
         self.kept: set[str] = set()
         self.current_key: str | None = None
         self.current_image = None
+        self.grayscale_preview = self.preferences.preview_grayscale
         self.preview_source = "jpg"
         self.project_folder: Path | None = None
         self.project_id: str | None = None
@@ -303,6 +338,10 @@ class MainWindow(
         self.gallery_layout = saved_layout if saved_layout in ("waterfall", "grid") else "waterfall"
         self.session_key: str | None = None
         self.filters = PhotoFilter()
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(140)
+        self._search_timer.timeout.connect(self._apply_filter)
         self._building_list = False
         self.save_timer = QTimer(self)
         self.save_timer.setSingleShot(True)
@@ -317,6 +356,7 @@ class MainWindow(
         self.sidebar_save_timer.setInterval(300)
         self.sidebar_save_timer.timeout.connect(self.store.save)
         self._make_ui()
+        self._apply_grayscale_preview(self.grayscale_preview, refresh=False)
         self._make_actions()
         self.center_stack.currentChanged.connect(lambda: self._adapt_viewer_toolbar())
         self.center_stack.currentChanged.connect(self._on_photo_selection_changed)
@@ -327,9 +367,21 @@ class MainWindow(
         self._source_apply_timer.setInterval(250)
         self._source_apply_timer.timeout.connect(self._apply_pending_source_update)
         self.source_monitor = SourceMonitor(self)
+        self.source_monitor.set_auto_import(self.preferences.auto_import_enabled)
         self.source_monitor.updated.connect(self._source_updated)
+        self.auto_import_monitor = AutoImportMonitor(self)
+        self.auto_import_monitor.discovered.connect(self._auto_import_folders)
+        self.filmstrip.ctrl_wheel_zoom = self.preferences.ctrl_wheel_zoom
+        self.filmstrip.hover_zoom_enabled = self.preferences.hover_zoom_enabled
+        self.preview_canvas.remember_zoom = self.preferences.remember_preview_zoom
+        self.preview_canvas.wheel_action = self.preferences.preview_wheel_action
         QApplication.instance().installEventFilter(self)
         self._refresh_project_list()
+        self.project_header.setVisible(self.preferences.sidebar_folders)
+        self.project_list.parentWidget().setVisible(self.preferences.sidebar_folders)
+        self.auto_import_monitor.configure(
+            self.preferences.auto_import_enabled,
+            [project["folder"] for project in self.store.projects() if project.get("folder")])
         self._update_decision_ui()
         if not restore_project:
             self._show_empty()

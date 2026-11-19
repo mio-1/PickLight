@@ -8,7 +8,7 @@ from pathlib import Path
 from math import ceil
 
 from PySide6.QtCore import QEasingCurve, QPointF, QRectF, QSize, QUrl, QVariantAnimation, Qt, Signal
-from PySide6.QtGui import QDesktopServices, QFont, QPainter, QPainterPath, QPen, QTextOption
+from PySide6.QtGui import QDesktopServices, QFont, QImage, QPainter, QPainterPath, QPen, QTextOption
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import QLabel, QPushButton, QSizePolicy, QTextEdit, QVBoxLayout, QWidget
 
@@ -21,6 +21,8 @@ from picklight.ui.graphics import star_path
 class PhotoStackPreview(QWidget):
     def __init__(self):
         super().__init__()
+        self.grayscale = False
+        self._gray_images = {}
         self.paths = ()
         self.selection_order = []
         self.images = {}
@@ -48,6 +50,7 @@ class PhotoStackPreview(QWidget):
         self.drop_animation.stop()
         self.paths = visible
         self.images = {path: image for path, image in self.images.items() if path in self.paths}
+        self._gray_images = {path: image for path, image in self._gray_images.items() if path in self.paths}
         self.incoming = incoming if incoming in added and len(paths) > 1 else None
         self.drop_progress = 0.0 if self.incoming else 1.0
         if self.incoming:
@@ -66,7 +69,12 @@ class PhotoStackPreview(QWidget):
     def set_image(self, path, image):
         if path in self.paths:
             self.images[path] = image
+            self._gray_images.pop(path, None)
             self.update()
+
+    def set_grayscale(self, enabled):
+        self.grayscale = bool(enabled)
+        self.update()
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -85,6 +93,10 @@ class PhotoStackPreview(QWidget):
                 painter.rotate(14 * remaining)
             painter.rotate((-8, 7, -5, 6, -4, 4, -3, 2)[index])
             image = self.images.get(path)
+            if image is not None and self.grayscale:
+                if path not in self._gray_images:
+                    self._gray_images[path] = image.convertToFormat(QImage.Format.Format_Grayscale8)
+                image = self._gray_images[path]
             size = (image.size().scaled(QSize(width, 184), Qt.AspectRatioMode.KeepAspectRatio)
                     if image is not None and not image.isNull() else QSize(width, 114))
             rect = QRectF(-size.width() / 2, -size.height() / 2, size.width(), size.height())
@@ -350,6 +362,7 @@ class StarRatingControl(QWidget):
 class InspectorSectionButton(QPushButton):
     def __init__(self, title: str):
         super().__init__(title)
+        self.setFocusPolicy(Qt.FocusPolicy.TabFocus)
         self.setCheckable(True)
         self.setChecked(True)
         self.setFixedHeight(30)
@@ -437,6 +450,8 @@ class PhotoCanvas(QWidget):
         super().__init__(parent)
         self.setObjectName("previewSurface")
         self.image = None
+        self.grayscale = False
+        self._grayscale_image = None
         self.message = ""
         self.loading_spinner = LoadingSpinner(self, 28)
         self.inspector = inspector
@@ -451,18 +466,33 @@ class PhotoCanvas(QWidget):
     def set_image(self, image):
         self.loading_spinner.set_loading(False)
         self.image = image
+        self._grayscale_image = None
         self.message = ""
         self.update()
 
     def set_message(self, message: str):
         self.loading_spinner.set_loading(False)
         self.image = None
+        self._grayscale_image = None
         self.message = message
         self.update()
 
     def set_loading(self):
         self.set_message("")
         self.loading_spinner.set_loading(True)
+
+    def set_grayscale(self, enabled):
+        self.grayscale = bool(enabled)
+        self.update()
+
+    def display_image(self):
+        if self.image is None or not self.grayscale:
+            return self.image
+        if self._grayscale_image is None:
+            from PySide6.QtGui import QImage
+            self._grayscale_image = self.image.convertToFormat(
+                QImage.Format.Format_Grayscale8).convertToFormat(QImage.Format.Format_RGB32)
+        return self._grayscale_image
 
     def image_rect(self) -> QRectF:
         if self.image is None or self.image.isNull():
@@ -478,7 +508,12 @@ class PhotoCanvas(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        if not self.inspector:
+        if self.inspector:
+            # The preview is repainted while sections below it change height.
+            # Fill every pixel here so an intermediate paint cannot expose an
+            # unpainted viewport frame during rapid expand/collapse clicks.
+            painter.fillRect(self.rect(), ui_color("#1f2023"))
+        else:
             surface = QPainterPath()
             surface.addRoundedRect(QRectF(self.rect()), 6, 6)
             painter.fillPath(surface, ui_color("#191a1d"))
@@ -486,7 +521,7 @@ class PhotoCanvas(QWidget):
         if self.image is not None and not self.image.isNull():
             painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
             target = self.image_rect()
-            painter.drawImage(target, self.image, QRectF(self.image.rect()))
+            painter.drawImage(target, self.display_image(), QRectF(self.image.rect()))
             if not self.inspector:
                 from picklight.ui.graphics import paint_photo_state
                 paint_photo_state(painter, target, self.decision_state)

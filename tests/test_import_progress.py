@@ -49,6 +49,7 @@ class ImportProgressTests(unittest.TestCase):
         values = []
         prepared = prepare_project(self.source, progress=lambda *args: values.append(args))
         self.assertEqual(len(prepared.pairs), 1)
+        self.assertEqual(prepared.aspects[str(self.source / "photo.jpg")], 48 / 64)
         self.assertEqual(values[0][:2], (0, 2))
         self.assertEqual(values[-1][:2], (2, 2))
 

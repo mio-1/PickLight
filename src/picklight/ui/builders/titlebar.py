@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QSize
+from PySide6.QtCore import QPoint, QSize, Qt
 from PySide6.QtGui import QActionGroup, QKeySequence
 from PySide6.QtWidgets import QHBoxLayout, QMenu
 
 from picklight.chrome import TitleBar, TitleBarSegment, WindowControlButton
 from picklight.color_management import COLOR_MODES
-from picklight.ui.common import TOOLBAR_ICON_SIZE
+from picklight.ui.common import ElidedLabel, NAVIGATION_ICON_SIZE, TOOLBAR_BUTTON_SIZE, TOOLBAR_ICON_SIZE
 from picklight.ui.graphics import theme_icon
 from picklight.ui.menus import ColorManagementMenu
-from picklight.ui.toolbar import ToolbarIconButton
+from picklight.ui.toolbar import FolderSwitchPanel, ToolbarIconButton
 
 
 def build_titlebar(self, outer):
@@ -46,7 +46,8 @@ def build_titlebar(self, outer):
     self.color_management_menu = ColorManagementMenu(self.main_menu)
     self.main_menu.addMenu(self.color_management_menu)
     self.preferences_action = self.main_menu.addAction("偏好设置…")
-    self.preferences_action.triggered.connect(self._show_preferences)
+    self.preferences_action.triggered.connect(
+        lambda _checked=False: self._show_preferences())
     self.color_mode_group = QActionGroup(self.color_management_menu)
     self.color_mode_group.setExclusive(True)
     self.color_mode_actions = {}
@@ -60,7 +61,6 @@ def build_titlebar(self, outer):
         self.color_mode_actions[mode] = action
     self.main_menu.addSeparator()
     self.check_update_action = self.main_menu.addAction("检查更新")
-    self.check_update_action.setVisible(False)
     self.check_update_action.triggered.connect(self._show_update_dialog)
     self.about_action = self.main_menu.addAction("关于 PickLight")
     self.about_action.triggered.connect(self._show_about_dialog)
@@ -71,6 +71,32 @@ def build_titlebar(self, outer):
     self.menu_button.clicked.connect(lambda: self.main_menu.popup(
         self.menu_button.mapToGlobal(QPoint(self.menu_button.width() - 2, 10))))
     left_controls.addWidget(self.menu_button)
+    self.folder_switch_button = ToolbarIconButton(self.title_left)
+    self.folder_switch_button.setObjectName("folderSwitch")
+    self.folder_switch_button.setIcon(theme_icon("toolbar.folder.switch", 16))
+    self.folder_switch_button.setIconSize(TOOLBAR_ICON_SIZE)
+    self.folder_switch_button.setFixedSize(TOOLBAR_BUTTON_SIZE)
+    self.folder_switch_button.setToolTip("切换文件夹")
+    self.folder_switch_button.setAccessibleName("切换文件夹")
+    self.folder_switch_panel = FolderSwitchPanel(self)
+    self.folder_switch_panel.folderSelected.connect(self._open_folder_from_switcher)
+    self.folder_switch_button.clicked.connect(self._show_folder_switcher)
+    self.large_screen_back_button = ToolbarIconButton(self.title_left)
+    self.large_screen_back_button.setObjectName("imageBack")
+    self.large_screen_back_button.setIcon(theme_icon("loupe.back", NAVIGATION_ICON_SIZE.width()))
+    self.large_screen_back_button.setIconSize(NAVIGATION_ICON_SIZE)
+    self.large_screen_back_button.setFixedSize(TOOLBAR_BUTTON_SIZE)
+    self.large_screen_back_button.setToolTip("退出全屏浏览，返回原视图")
+    self.large_screen_back_button.setAccessibleName("退出全屏浏览")
+    self.large_screen_back_button.clicked.connect(lambda: self._exit_large_screen())
+    left_controls.addWidget(self.large_screen_back_button)
+    self.large_screen_back_button.hide()
+    self.large_screen_title = ElidedLabel("", self.title_bar)
+    self.large_screen_title.elide_mode = Qt.TextElideMode.ElideMiddle
+    self.large_screen_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    self.large_screen_title.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+    self.large_screen_title.setStyleSheet("color:#a9abb3;background:transparent;font-size:12px;")
+    self.large_screen_title.hide()
     self.sidebar_toggle = ToolbarIconButton(self.title_left)
     self.sidebar_toggle.setObjectName("sidebarToggle")
     self.sidebar_toggle.setIcon(theme_icon("toggle.sidebar", 14))
@@ -82,6 +108,7 @@ def build_titlebar(self, outer):
     self.sidebar_toggle.setAccessibleName(self.sidebar_toggle.toolTip())
     self.sidebar_toggle.clicked.connect(self._set_sidebar_collapsed)
     left_controls.addStretch()
+    left_controls.addWidget(self.folder_switch_button)
     left_controls.addWidget(self.sidebar_toggle)
     self.minimize_button = WindowControlButton("minimize")
     self.minimize_button.clicked.connect(self.showMinimized)

@@ -15,6 +15,12 @@ class PreferencesSearchEdit(QLineEdit):
         self.setFixedHeight(32)
         self.setPlaceholderText("搜索...")
         self.setTextMargins(30, 0, 10, 2)
+        self.clear_action = self.addAction(
+            theme_icon("search.clear", 14), QLineEdit.ActionPosition.TrailingPosition)
+        self.clear_action.setText("清除搜索")
+        self.clear_action.setVisible(False)
+        self.clear_action.triggered.connect(self.clear)
+        self.textChanged.connect(lambda value: self.clear_action.setVisible(bool(value)))
 
     def paintEvent(self, event):
         super().paintEvent(event)

@@ -148,7 +148,7 @@ class SessionStore:
         self.save()
 
     def set_folder_appearance(self, project_id: str, *, icon: str | None = None,
-                              color: str | None = None) -> None:
+                               color: str | None = None) -> None:
         project = self.project_by_id(project_id)
         if project is None:
             raise ValueError("文件夹不存在")
@@ -160,6 +160,16 @@ class SessionStore:
             project["icon"] = icon
         if color is not None:
             project["color"] = color.lower()
+        self.save()
+
+    def set_folder_cover(self, project_id: str, photo: Path) -> None:
+        project = self.project_by_id(project_id)
+        if project is None or not project.get("folder"):
+            raise ValueError("文件夹没有绑定来源目录")
+        root, photo = Path(project["folder"]).resolve(), Path(photo).resolve()
+        if not photo.is_file() or not photo.is_relative_to(root):
+            raise ValueError("照片不在此文件夹中")
+        project["cover_path"] = str(photo)
         self.save()
 
     def folder_branch(self, project_id: str) -> list[dict]:
@@ -176,6 +186,25 @@ class SessionStore:
         return [project for project in projects if project["id"] in ids]
 
     photo_path_key = staticmethod(path_key)
+
+    def quick_access_folders(self) -> list[dict]:
+        return sorted((folder for folder in self.projects()
+                       if type(folder.get("quick_access_order")) is int),
+                      key=lambda folder: folder["quick_access_order"])
+
+    def set_quick_access(self, project_id: str, pinned: bool) -> None:
+        folder = self.project_by_id(project_id)
+        if folder is None:
+            return
+        if pinned:
+            if type(folder.get("quick_access_order")) is int:
+                return
+            folder["quick_access_order"] = max(
+                (item["quick_access_order"] for item in self.quick_access_folders()),
+                default=-1) + 1
+        else:
+            folder.pop("quick_access_order", None)
+        self.save()
 
     def delete_folder_branch(self, project_id: str) -> set[str]:
         branch = self.folder_branch(project_id)

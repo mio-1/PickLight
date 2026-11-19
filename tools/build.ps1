@@ -1,9 +1,12 @@
-param([switch]$Preview)
+param([switch]$Preview, [string]$PreviewName = 'Preview')
 $ErrorActionPreference = 'Stop'
 $project = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $project
 
-$distRoot = if ($Preview) { 'dist\Preview' } else { 'dist' }
+if ($PreviewName -notmatch '^[A-Za-z0-9_-]+$') {
+    throw 'PreviewName must contain only letters, digits, underscores, or hyphens.'
+}
+$distRoot = if ($Preview) { Join-Path 'dist' $PreviewName } else { 'dist' }
 $packageDir = Join-Path $distRoot 'PickLight'
 
 if (-not (Test-Path -LiteralPath '.venv\Scripts\python.exe')) {
@@ -34,6 +37,10 @@ try {
     Remove-Item -LiteralPath $stagedAssets -Recurse -Force -ErrorAction Stop
 }
 if ($buildExitCode -ne 0) { exit $buildExitCode }
+
+& .\.venv\Scripts\python.exe -m PyInstaller --noconfirm --clean --onefile --windowed `
+    --name PickLightUpdater --distpath $packageDir --specpath build src\picklight\update_helper.py
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Copy-Item -LiteralPath LICENSE -Destination (Join-Path $packageDir 'LICENSE') -Force
 Copy-Item -LiteralPath README.md -Destination (Join-Path $packageDir 'README.md') -Force

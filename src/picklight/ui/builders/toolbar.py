@@ -15,7 +15,10 @@ from PySide6.QtWidgets import (
     QWidgetAction,
 )
 
-from picklight.ui.common import DEFAULT_THUMBNAIL_WIDTH, ElidedLabel, TOOLBAR_ICON_SIZE, label
+from picklight.ui.common import (
+    DEFAULT_THUMBNAIL_WIDTH, ElidedLabel, NAVIGATION_ICON_SIZE,
+    TOOLBAR_BUTTON_SIZE, TOOLBAR_ICON_SIZE, label,
+)
 from picklight.ui.graphics import (
     arrangement_icon,
     theme_icon,
@@ -44,8 +47,8 @@ def build_toolbar(self):
     self.loupe_back_button = ToolbarIconButton()
     self.loupe_back_button.setObjectName("imageBack")
     self.loupe_back_button.setIcon(theme_icon("loupe.back"))
-    self.loupe_back_button.setIconSize(QSize(24, 24))
-    self.loupe_back_button.setFixedSize(26, 26)
+    self.loupe_back_button.setIconSize(NAVIGATION_ICON_SIZE)
+    self.loupe_back_button.setFixedSize(TOOLBAR_BUTTON_SIZE)
     self.loupe_back_button.setToolTip("返回照片列表")
     self.loupe_back_button.setAccessibleName("返回照片列表")
     self.loupe_back_button.clicked.connect(self._show_grid)
@@ -92,11 +95,11 @@ def build_toolbar(self):
     zoom_layout.addWidget(self.zoom_out_button)
     self.zoom_slider = GalleryZoomSlider(Qt.Orientation.Horizontal)
     self.zoom_slider.setObjectName("thumbnailZoom")
-    self.zoom_slider.setRange(160, 460)
+    self.zoom_slider.setRange(96, 460)
     self.zoom_slider.setSingleStep(20)
     self.zoom_slider.setPageStep(20)
     saved_zoom = self.store.data.get("thumbnail_width")
-    self.zoom_slider.setValue(saved_zoom if type(saved_zoom) is int and 160 <= saved_zoom <= 460
+    self.zoom_slider.setValue(saved_zoom if type(saved_zoom) is int and 96 <= saved_zoom <= 460
                               else DEFAULT_THUMBNAIL_WIDTH)
     self.zoom_slider.setFixedWidth(96)
     self.zoom_slider.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -111,9 +114,6 @@ def build_toolbar(self):
     self.zoom_in_button.clicked.connect(lambda: self.zoom_slider.setValue(
         self.zoom_slider.value() + self.zoom_slider.singleStep()))
     zoom_layout.addWidget(self.zoom_in_button)
-    self.zoom_slider.valueChanged.connect(lambda value: (
-        self.zoom_out_button.setEnabled(value > self.zoom_slider.minimum()),
-        self.zoom_in_button.setEnabled(value < self.zoom_slider.maximum())))
     header.addWidget(self.zoom_controls)
     self.loupe_zoom_controls = QWidget()
     loupe_zoom_layout = QHBoxLayout(self.loupe_zoom_controls)
@@ -201,6 +201,7 @@ def build_toolbar(self):
     search_palette.setColor(QPalette.ColorRole.PlaceholderText, QColor("#97999f"))
     self.search_edit.setPalette(search_palette)
     self.search_edit.textChanged.connect(self._search_photos)
+    self.search_edit.returnPressed.connect(self._flush_photo_search)
     self.search_toggle = ToolbarIconButton()
     self.search_toggle.setObjectName("searchToggle")
     self.search_toggle.setIcon(search_icon())
@@ -219,6 +220,7 @@ def build_toolbar(self):
     self.compact_search_edit.setPlaceholderText("搜索")
     self.compact_search_edit.setFixedSize(200, 32)
     self.compact_search_edit.textChanged.connect(self._search_photos)
+    self.compact_search_edit.returnPressed.connect(self._flush_photo_search)
     self.search_scope_menu = QMenu(self.search_edit)
     self.search_scope_menu.setObjectName("toolbarSearchScopeMenu")
     search_scope_panel = SearchScopePanel()
@@ -260,8 +262,8 @@ def build_toolbar(self):
     self.image_rotate_button = ToolbarIconButton()
     self.image_rotate_button.setObjectName("imageRotate")
     self.image_rotate_button.setIcon(theme_icon("loupe.rotate", 16))
-    self.image_rotate_button.setIconSize(QSize(16, 16))
-    self.image_rotate_button.setFixedSize(26, 26)
+    self.image_rotate_button.setIconSize(TOOLBAR_ICON_SIZE)
+    self.image_rotate_button.setFixedSize(TOOLBAR_BUTTON_SIZE)
     self.image_rotate_button.setToolTip("旋转")
     self.image_rotate_button.setAccessibleName("逆时针旋转 90°")
     self.image_rotate_button.clicked.connect(lambda: self.preview_canvas.rotate_counterclockwise())
@@ -269,21 +271,31 @@ def build_toolbar(self):
     self.review_auto_advance_button = ToolbarIconButton()
     self.review_auto_advance_button.setObjectName("reviewAutoAdvance")
     self.review_auto_advance_button.setIcon(theme_icon("loupe.auto.advance", 16))
-    self.review_auto_advance_button.setIconSize(QSize(16, 16))
-    self.review_auto_advance_button.setFixedSize(26, 26)
+    self.review_auto_advance_button.setIconSize(TOOLBAR_ICON_SIZE)
+    self.review_auto_advance_button.setFixedSize(TOOLBAR_BUTTON_SIZE)
     self.review_auto_advance_button.setCheckable(True)
     self.review_auto_advance_button.setChecked(self.store.data.get("review_auto_advance") is True)
     self.review_auto_advance_button.setAccessibleName("标记后自动下一张")
     self.review_auto_advance_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
     self.review_auto_advance_button.toggled.connect(self._set_review_auto_advance)
     loupe_tools_layout.addWidget(self.review_auto_advance_button)
+    self.image_fit_canvas_button = ToolbarIconButton()
+    self.image_fit_canvas_button.setObjectName("imageFit")
+    self.image_fit_canvas_button.setIcon(theme_icon("loupe.fit_canvas", 16))
+    self.image_fit_canvas_button.setIconSize(QSize(16, 16))
+    self.image_fit_canvas_button.setFixedSize(26, 26)
+    self.image_fit_canvas_button.setToolTip("适应大小")
+    self.image_fit_canvas_button.setAccessibleName("适应大小")
+    self.image_fit_canvas_button.clicked.connect(lambda: self.preview_canvas.fit_to_canvas())
+    loupe_tools_layout.addWidget(self.image_fit_canvas_button)
     self.image_fit_button = ToolbarIconButton()
     self.image_fit_button.setObjectName("imageFit")
     self.image_fit_button.setIcon(theme_icon("loupe.fit", 14))
     self.image_fit_button.setIconSize(QSize(14, 14))
     self.image_fit_button.setFixedSize(26, 26)
-    self.image_fit_button.setEnabled(False)
-    self.image_fit_button.setAccessibleName("大图模式（尚未开放）")
+    self.image_fit_button.setToolTip("全屏浏览")
+    self.image_fit_button.setAccessibleName("进入全屏浏览")
+    self.image_fit_button.clicked.connect(self._enter_large_screen)
     loupe_tools_layout.addWidget(self.image_fit_button)
     self.previous_button = ToolbarIconButton()
     self.next_button = ToolbarIconButton()
@@ -291,8 +303,8 @@ def build_toolbar(self):
                                       (self.next_button, 1, "下一张")):
         button.setObjectName("imagePrevious" if direction < 0 else "imageNext")
         button.setIcon(navigation_icon(direction))
-        button.setIconSize(QSize(24, 24))
-        button.setFixedSize(26, 26)
+        button.setIconSize(NAVIGATION_ICON_SIZE)
+        button.setFixedSize(TOOLBAR_BUTTON_SIZE)
         button.setToolTip(title)
         button.setAccessibleName(title)
         button.clicked.connect(lambda checked=False, step=direction: self.move_selection(step))

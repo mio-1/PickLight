@@ -78,10 +78,16 @@ class PhotoFileTests(unittest.TestCase):
 
     def test_trash_failure_never_removes_originals(self):
         files = capture_files(group_files([self.pair], sidecars=True))
-        with patch("picklight.photo_files.QFile.moveToTrash", return_value=False), \
-                patch("picklight.photo_files.QFile.remove") as remove:
+        # PySide resolves this overloaded API on the QFile instance; patching
+        # only the class method can leave the real OS operation callable.
+        with patch("picklight.photo_files.QFile", autospec=True) as file_class:
+            file = file_class.return_value
+            file.moveToTrash.return_value = False
+            file.errorString.return_value = "simulated trash failure"
             self.assertEqual(len(recycle_files(files)), 3)
-            remove.assert_not_called()
+            self.assertEqual(file.moveToTrash.call_count, 3)
+            file_class.remove.assert_not_called()
+            file.remove.assert_not_called()
         self.assertTrue(all(path.exists() for path in files))
 
 
@@ -116,14 +122,58 @@ class PhotoMenuTests(unittest.TestCase):
         self.addCleanup(menu.deleteLater)
         actions = {action.data(): action for action in menu.actions() if not action.isSeparator()}
         self.assertEqual([action.text() for action in actions.values()],
-                         ["在文件管理器打开", "打开文件所在位置", "重命名", "复制文件路径", "删除文件"])
+                         ["在文件管理器打开", "打开文件所在位置", "重命名",
+                          "设为文件夹封面", "黑白预览", "复制文件路径", "删除文件"])
         self.assertFalse(actions["rename"].isEnabled())
+        for command, shortcut in (("rename", "photo.rename"),
+                                  ("grayscale", "photo.grayscale")):
+            self.assertEqual(actions[command].property("displayShortcut"),
+                             self.window.shortcuts[shortcut])
+        self.assertFalse(hasattr(self.window, "compare_button"))
+        self.assertNotIn("view.compare", self.window.shortcut_actions)
         self.assertTrue(all(not action.icon().isNull() for action in actions.values()))
         actions["copy_path"].trigger()
         self.assertEqual(QApplication.clipboard().text().splitlines(), list(map(str, group_files(pairs))))
         with patch("picklight.photo_menu.subprocess.Popen") as launch:
             actions["explorer"].trigger()
             launch.assert_called_once_with(["explorer.exe", "/select,", str(pairs[0].display_path)])
+
+    def test_folder_cover_persists_and_grayscale_is_preview_only(self):
+        pair = self.window.visible[1]
+        menu = self.window._build_photo_menu((pair,))
+        self.addCleanup(menu.deleteLater)
+        actions = {action.data(): action for action in menu.actions() if not action.isSeparator()}
+        actions["cover"].trigger()
+        project = self.window.store.project_for_folder(self.root / "photos")
+        self.assertEqual(project["cover_path"], str(pair.display_path.resolve()))
+        source = pair.display_path.read_bytes()
+        from PySide6.QtGui import QImage
+        color_image = QImage(32, 32, QImage.Format.Format_RGB32)
+        color_image.fill("#d03020")
+        row = self.window.visible.index(pair)
+        self.window.loader.remember(str(pair.display_path), 420, color_image)
+        self.window._paint_thumbnail(row, color_image)
+        self.window.preview_canvas.set_image(color_image)
+        actions["grayscale"].trigger()
+        self.assertTrue(self.window.preview_canvas.grayscale)
+        self.assertTrue(self.window.inspector_preview.grayscale)
+        self.assertTrue(self.window.multi_preview.grayscale)
+        self.assertTrue(self.window.large_screen_page.strip.grayscale)
+        self.assertTrue(self.window.preferences.preview_grayscale)
+        self.assertTrue(self.window.store.data["preferences"]["preview_grayscale"])
+        checked_menu = self.window._build_photo_menu((pair,))
+        self.addCleanup(checked_menu.deleteLater)
+        checked_action = next(action for action in checked_menu.actions()
+                              if action.data() == "grayscale")
+        self.assertFalse(checked_action.isCheckable())
+        self.assertIs(checked_action.property("trailingCheck"), True)
+        center = self.window.preview_canvas.display_image().pixelColor(16, 16)
+        self.assertEqual((center.red(), center.green(), center.blue()),
+                         (center.red(), center.red(), center.red()))
+        pixel = self.window.filmstrip.item(row).icon().pixmap(32, 32).toImage().pixelColor(16, 16)
+        self.assertEqual(pixel.red(), pixel.green())
+        self.assertEqual(pixel.green(), pixel.blue())
+        self.assertEqual(pair.display_path.read_bytes(), source)
 
     def test_right_click_preserves_existing_multi_selection(self):
         grid = self.window.filmstrip
@@ -135,6 +185,15 @@ class PhotoMenuTests(unittest.TestCase):
         QTest.mousePress(grid.viewport(), Qt.MouseButton.RightButton,
                          pos=grid.visualItemRect(grid.item(2)).center())
         self.assertEqual(grid.selectedItems(), [grid.item(2)])
+
+    def test_grayscale_save_failure_keeps_display_and_preference_in_sync(self):
+        with patch("picklight.preferences.save_preferences", side_effect=OSError("disk full")), \
+                patch("picklight.photo_menu.NoticeDialog.exec") as notice:
+            self.window._set_grayscale_preview(True)
+        notice.assert_called_once()
+        self.assertFalse(self.window.grayscale_preview)
+        self.assertFalse(self.window.preview_canvas.grayscale)
+        self.assertFalse(self.window.preferences.preview_grayscale)
 
     def test_delete_confirmation_counts_and_cancellation(self):
         pairs = tuple(self.window.visible[:2])

@@ -40,7 +40,7 @@ class WorkflowTests(unittest.TestCase):
                     and not widget.loader.closed):
                 widget.close()
 
-    def test_main_menu_shows_color_management_about_and_exit(self):
+    def test_main_menu_shows_update_about_and_exit(self):
         with tempfile.TemporaryDirectory() as directory:
             previous = os.environ.get("PICKLIGHT_SETTINGS")
             os.environ["PICKLIGHT_SETTINGS"] = str(Path(directory) / "settings.json")
@@ -51,8 +51,8 @@ class WorkflowTests(unittest.TestCase):
                 self.assertEqual(
                     [action.text() for action in window.main_menu.actions()
                      if not action.isSeparator() and action.isVisible()],
-                    ["色彩管理", "偏好设置…", "关于 PickLight", "退出"])
-                self.assertFalse(window.check_update_action.isVisible())
+                    ["色彩管理", "偏好设置…", "检查更新", "关于 PickLight", "退出"])
+                self.assertTrue(window.check_update_action.isVisible())
                 self.assertEqual(window.main_menu.width(), 190)
                 window.menu_button.click()
                 self.app.processEvents()
@@ -73,7 +73,7 @@ class WorkflowTests(unittest.TestCase):
                 else:
                     os.environ["PICKLIGHT_SETTINGS"] = previous
 
-    def test_search_scope_magnifier_highlights_on_hover(self):
+    def test_search_scope_arrow_highlights_on_hover(self):
         button = SearchScopeButton()
         button.show()
         self.app.processEvents()
@@ -403,8 +403,10 @@ class WorkflowTests(unittest.TestCase):
                 self.assertEqual(window.inspector_preview.image_rect().width(),
                                  window.inspector_preview.width())
                 window.preview_expand_button.click()
-                self.assertFalse(window.preview_expand_button.isEnabled())
-                self.assertFalse(window.image_fit_button.isEnabled())
+                self.assertTrue(window._large_screen_active())
+                window._exit_large_screen()
+                self.assertTrue(window.preview_expand_button.isEnabled())
+                self.assertTrue(window.image_fit_button.isEnabled())
                 self.assertEqual(window.center_stack.currentIndex(), 0)
                 window.close()
             finally:
@@ -516,6 +518,7 @@ class WorkflowTests(unittest.TestCase):
                 window.search_popup.popup(window.search_toggle.mapToGlobal(QPoint(0, 30)))
                 self.app.processEvents()
                 window.compact_search_edit.setText("DSC_0001")
+                QTest.qWait(160)
                 self.assertEqual(window.filters.path_contains, "DSC_0001")
                 self.assertEqual(window.search_edit.text(), "DSC_0001")
                 self.assertEqual(len(window.visible), 1)
@@ -534,6 +537,22 @@ class WorkflowTests(unittest.TestCase):
                 self.assertEqual(window.type_label.text(), "JPG")
                 self.assertEqual(list(window.inspector_sections),
                                  ["属性", "源文件", "相机", "曝光", "日期"])
+                preview_position = window.inspector_preview.mapTo(
+                    window.inspector_scroll.viewport(), QPoint(0, 0))
+                viewport_width = window.inspector_scroll.viewport().width()
+                for _ in range(8):
+                    window.inspector_sections["源文件"].click()
+                    self.app.processEvents()
+                    self.assertEqual(window.inspector_scroll.viewport().width(), viewport_width)
+                    self.assertEqual(window.inspector_preview.mapTo(
+                        window.inspector_scroll.viewport(), QPoint(0, 0)), preview_position)
+                    self.assertEqual(window.inspector_scroll.verticalScrollBar().value(), 0)
+                    window.inspector_sections["源文件"].click()
+                    self.app.processEvents()
+                    self.assertEqual(window.inspector_scroll.viewport().width(), viewport_width)
+                    self.assertEqual(window.inspector_preview.mapTo(
+                        window.inspector_scroll.viewport(), QPoint(0, 0)), preview_position)
+                    self.assertEqual(window.inspector_scroll.verticalScrollBar().value(), 0)
                 window.inspector_sections["源文件"].click()
                 self.assertFalse(window.source_path_link.isVisible())
                 window.inspector_sections["源文件"].click()
@@ -864,7 +883,7 @@ class WorkflowTests(unittest.TestCase):
                 self.assertTrue(window.folder_cards_container.isVisible())
                 self.assertIs(window.inspector_stack.currentWidget(), window.folder_inspector)
                 self.assertEqual(window.folder_children_heading.text(), "子文件夹 (1)")
-                self.assertEqual(window.folder_inspector_count.text(), "0")
+                self.assertEqual(window.folder_inspector_count.text(), "1")
                 description = "1234567890" * 12
                 window.folder_inspector_description.setText(description)
                 self.app.processEvents()
@@ -921,7 +940,7 @@ class WorkflowTests(unittest.TestCase):
                 self.assertTrue(window.folder_section.isVisible())
                 self.assertTrue(window.filmstrip.isVisible())
                 self.assertEqual(window.filmstrip.count(), 2)
-                self.assertEqual(window.folder_inspector_count.text(), "2")
+                self.assertEqual(window.folder_inspector_count.text(), "3")
                 self.assertEqual(window.folder_content_heading.text(), "内容 (2)")
                 self.assertFalse(window.folder_content_heading.isVisible())
                 window.folder_children_heading.setChecked(True)

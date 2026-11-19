@@ -241,7 +241,13 @@ class MoveFolderDialog(FolderModal):
         self.search.setPlaceholderText("搜索")
         self.search.addAction(QIcon(asset_path("search")), QLineEdit.ActionPosition.LeadingPosition)
         self.search.setFixedHeight(30)
-        self.search.setClearButtonEnabled(True)
+        self.search_clear_action = self.search.addAction(
+            theme_icon("search.clear", 14), QLineEdit.ActionPosition.TrailingPosition)
+        self.search_clear_action.setText("清除搜索")
+        self.search_clear_action.setVisible(False)
+        self.search_clear_action.triggered.connect(self.search.clear)
+        self.search.textChanged.connect(
+            lambda value: self.search_clear_action.setVisible(bool(value)))
         body.addWidget(self.search)
         body.addWidget(QLabel("在下方列表选择移动的位置：", objectName="folderModalHint"))
         self.tree = tree

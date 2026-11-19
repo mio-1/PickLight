@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QSize, QUrl
+from PySide6.QtCore import QSize, QTimer, QUrl
 from PySide6.QtGui import QDesktopServices
 from picklight.message_dialogs import MessageBox as QMessageBox
 
@@ -15,6 +15,26 @@ from picklight.ui.graphics import format_detail_date, oriented_jpeg_size
 
 
 class PhotoSelectionMixin:
+    def _photo_middle_clicked(self, item):
+        row = self.filmstrip.row(item)
+        if not 0 <= row < len(self.visible):
+            return
+        path = self.visible[row].display_path
+        if self.preferences.middle_click_action == "system":
+            return
+        from picklight.ui.detached_preview import DetachedPreview
+        preview = DetachedPreview(path, self, color_mode=self.color_mode,
+                                  grayscale=self.grayscale_preview)
+        preview.show()
+
+    def _photo_double_clicked(self, item):
+        if self.preferences.double_click_preview:
+            self._show_loupe()
+            return
+        row = self.filmstrip.row(item)
+        if 0 <= row < len(self.visible):
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.visible[row].display_path)))
+
     def _on_row_changed(self, row: int):
         if self._building_list or row < 0 or row >= len(self.visible):
             return
@@ -100,36 +120,63 @@ class PhotoSelectionMixin:
                       self.aperture_label, self.shutter_label, self.iso_label,
                       self.capture_date_label):
             field.setText("—")
-        self.details_loader.request(path)
         self.current_image = None
         self.palette_strip.set_colors(self.palette_loader.cached(str(path)) or [])
         hero = self.loader.cached(path, 2200)
         cached = hero if hero is not None else self.loader.cached(path, 420)
-        # request() delivers a cached hero synchronously without a blank intermediate frame.
-        if hero is None:
+        if hero is not None:
+            self.current_image = hero
+            self.preview_canvas.set_image(hero)
+            self.inspector_preview.set_image(hero)
+        else:
             if cached is not None:
                 self.preview_canvas.set_image(cached)
                 self.inspector_preview.set_image(cached)
             else:
                 self.preview_canvas.set_loading()
                 self.inspector_preview.set_loading()
-        self.loader.request(path, 2200)
+        timer = getattr(self, "_hero_preview_timer", None)
+        if timer is None:
+            timer = QTimer(self)
+            timer.setSingleShot(True)
+            timer.setInterval(140)
+            timer.timeout.connect(self._request_delayed_hero_preview)
+            self._hero_preview_timer = timer
+        timer.stop()
+        self._pending_hero_preview_path = str(path)
+        if hero is None:
+            # Show the light camera preview first. Wait briefly before decoding
+            # a larger image so fast browsing does not queue discarded work.
+            self.loader.request_current(path)
+            timer.start()
+        else:
+            self.details_loader.request(path)
         if self.center_stack.currentIndex() == 0:
             self._update_toolbar_folder_title()
         elif self.center_stack.currentIndex() == 1:
             self._update_loupe_navigation()
 
+    def _request_delayed_hero_preview(self):
+        path = self._current_preview_path()
+        if path is not None and str(path) == getattr(self, "_pending_hero_preview_path", None):
+            self.loader.request(path, 2200)
+
     def _update_rating_display(self):
         stars = self.ratings.get(self.current_key or "", 0)
         self.inspector_stars.set_rating(stars)
+        self._sync_large_screen()
 
     def _preview_ready(self, path: str, width: int, image):
         self.loader.remember(path, width, image)
+        current = self._current_preview_path()
+        if width == 420 and current and str(current) == path:
+            # ExifTool holds the photo lock for hundreds of milliseconds. Start
+            # it only after the selected RAW's small preview has decoded.
+            self.details_loader.request(current)
         if width == 420:
             self.multi_preview.set_image(path, image)
             for card in getattr(self, "_folder_cover_cards", {}).get(path, []):
                 card.set_cover(image)
-        current = self._current_preview_path()
         if width >= 2200:
             if current and str(current) == path:
                 if self.current_image is None or image.width() >= self.current_image.width():
@@ -141,6 +188,8 @@ class PhotoSelectionMixin:
             if current and str(current) == path and self.current_image is None:
                 self.preview_canvas.set_image(image)
                 self.inspector_preview.set_image(image)
+            if self._large_screen_active():
+                return
             row = self.visible_row_by_path.get(path)
             if row is not None and row < self.filmstrip.count():
                 viewport = self.filmstrip.viewport().rect().adjusted(0, -250, 0, 250)
@@ -150,6 +199,8 @@ class PhotoSelectionMixin:
     def _preview_failed(self, path: str, width: int, error: str):
         self.loader.forget_failed(path, width)
         current = self._current_preview_path()
+        if width == 420 and current and str(current) == path:
+            self.details_loader.request(current)
         if width == 2200 and current and str(current) == path:
             self.preview_canvas.set_message("无法显示预览\n" + error)
             self.inspector_preview.set_message("无法显示预览")
@@ -190,6 +241,7 @@ class PhotoSelectionMixin:
             self.preview_canvas.set_source_size(QSize(int(width), int(height)))
         date = details.get("DateTimeOriginal")
         self.capture_date_label.setText(format_detail_date(date))
+        self._sync_large_screen()
 
 
     def _details_failed(self, path: str, _error: str):

@@ -10,6 +10,8 @@ from picklight.chrome import window_resize_edges
 
 class WindowChromeMixin:
     def _workspace_splitter_moved(self, _position, index):
+        if self._large_screen_active():
+            return
         if index == 1 and not self._sidebar_collapsed:
             self._expanded_sidebar_width = self.browser_panel.width()
             self.store.data["sidebar_width"] = self._expanded_sidebar_width
@@ -47,41 +49,55 @@ class WindowChromeMixin:
     def _position_sidebar_toggle(self):
         if not hasattr(self, "title_left") or not hasattr(self, "browser_panel"):
             return
+        large_screen = self._large_screen_active()
         medium = hasattr(self, "center_stack") and self.center_stack.currentIndex() == 1
-        collapsed = self._sidebar_collapsed
+        collapsed = self._sidebar_collapsed and not large_screen
         # Share one continuous toolbar when the sidebar is hidden, in either view.
         if collapsed:
-            for index, button in enumerate((self.menu_button, self.sidebar_toggle)):
+            for index, button in enumerate((self.menu_button, self.folder_switch_button,
+                                            self.sidebar_toggle)):
                 if button.parentWidget() is not self.viewer_toolbar:
                     self.header_layout.insertWidget(index, button)
                     self.header_leading_spacer += 1
                     self.header_trailing_spacer += 1
             self.title_left.hide()
         else:
-            for button in (self.menu_button, self.sidebar_toggle):
+            for button in (self.menu_button, self.folder_switch_button, self.sidebar_toggle):
                 if button.parentWidget() is not self.title_left:
                     if button is self.menu_button:
                         self.title_left.layout().insertWidget(0, button)
+                    elif button is self.folder_switch_button:
+                        self.title_left.layout().insertWidget(
+                            self.title_left.layout().indexOf(self.sidebar_toggle), button)
                     else:
                         self.title_left.layout().addWidget(button)
                     self.header_leading_spacer -= 1
                     self.header_trailing_spacer -= 1
             self.title_left.show()
-        self.sidebar_toggle.show()
-        self.menu_button.setVisible(not (medium and collapsed))
+        self.sidebar_toggle.setVisible(not large_screen)
+        self.menu_button.setVisible(not large_screen and not (medium and collapsed))
+        self.folder_switch_button.setVisible(not large_screen)
+        self.large_screen_back_button.setVisible(large_screen)
+        self.large_screen_title.setVisible(large_screen)
+        if large_screen:
+            self.large_screen_title.setGeometry(140, 0, max(0, self.title_bar.width() - 280),
+                                               self.title_bar.height())
+            self.large_screen_title.raise_()
         self.header_layout.setContentsMargins(8 if collapsed else 14, 8, 14, 0)
         self.header_layout.setSpacing(0 if collapsed else 6)
         self.file_label.setContentsMargins((10 if medium else 6) if collapsed else 0, 0, 0, 0)
-        for button in (self.menu_button, self.sidebar_toggle, self.loupe_back_button,
+        for button in (self.menu_button, self.folder_switch_button, self.sidebar_toggle, self.loupe_back_button,
                        self.folder_back_button, self.folder_forward_button):
             button.setFixedSize(24, 26)
         self.menu_button.setIconSize(QSize(16, 16))
         self.sidebar_toggle.setIconSize(QSize(14, 14))
-        self.title_left.setFixedWidth(90 if collapsed else self.browser_panel.width())
-        self.title_right.setFixedWidth(self.inspector.width())
+        self.title_left.setFixedWidth(48 if large_screen else 90 if collapsed else self.browser_panel.width())
+        self.title_right.setFixedWidth(120 if large_screen else self.inspector.width())
         self.title_bar.update()
 
     def _size_collapsed_splitter(self):
+        if self._large_screen_active():
+            return
         if self._sidebar_collapsed and self.splitter.isVisible():
             middle = max(1, self.splitter.width() - self._inspector_width - self.splitter.handleWidth())
             self.splitter.setSizes([0, middle, self._inspector_width])
@@ -113,9 +129,16 @@ class WindowChromeMixin:
         QTimer.singleShot(0, self._resize_grid)
 
     def _adapt_viewer_toolbar(self):
+        if self._large_screen_active():
+            for widget in (self.folder_navigation, self.loupe_back_button, self.zoom_controls,
+                           self.loupe_zoom_controls, self.grid_right_tools, self.loupe_right_tools,
+                           self.search_edit, self.search_toggle, self.filter_container, self.file_label):
+                widget.hide()
+            self._sync_large_screen()
+            return
         if hasattr(self, "zoom_controls") and hasattr(self, "search_edit"):
+            self.file_label.show()
             width = self.viewer.width()
-            grid = self.center_stack.currentIndex() == 0
             medium = self.center_stack.currentIndex() == 1
             large_toolbar = width >= 700
             listing = not medium
@@ -217,11 +240,13 @@ class WindowChromeMixin:
 
     def toggle_fullscreen(self):
         if self.isFullScreen():
-            self.showNormal()
+            self.setWindowState(self._fullscreen_restore_state)
             self.title_bar.show()
         else:
+            self._fullscreen_restore_state = self.windowState()
             self.title_bar.hide()
             self.showFullScreen()
+        self._sync_large_screen()
 
     def toggle_maximize(self):
         if self.isMaximized():

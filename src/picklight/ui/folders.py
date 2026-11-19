@@ -74,7 +74,7 @@ class FolderSectionToggle(QToolButton):
     def setText(self, text):
         super().setText(text)
         font = QFont(self.font())
-        font.setPixelSize(13)
+        font.setPixelSize(12)
         self.setFont(font)
         self.setFixedWidth(self.fontMetrics().horizontalAdvance(text) + 28)
 
@@ -164,7 +164,7 @@ class FolderCard(QFrame):
             painter.restore()
         if self.selected or self.underMouse():
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.setPen(QPen(ui_color("#2ea8f4") if self.selected
+            painter.setPen(QPen(ui_color("#3297ff") if self.selected
                                 else QColor(247, 248, 248, 14), 2 if self.selected else 1))
             painter.drawRoundedRect(QRectF(1, 1, width - 2, cover_height + 16), 8, 8)
         font = painter.font()
@@ -325,7 +325,7 @@ class SidebarNavButton(QPushButton):
                           Qt.AlignmentFlag.AlignCenter,
                           QIcon.Mode.Active if self._hovered else QIcon.Mode.Normal)
         font = painter.font()
-        font.setPixelSize(14)
+        font.setPixelSize(13)
         font.setWeight(QFont.Weight.Normal)
         painter.setFont(font)
         painter.setPen(ui_color("#ffffff"))
@@ -447,6 +447,7 @@ class ProjectTree(QTreeWidget):
         self._branch_animations = {}
         self.viewport().setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)
         self.setMouseTracking(True)
+        self.setExpandsOnDoubleClick(False)
         self.expanded.connect(lambda index: self._animate_branch(index, True))
         self.collapsed.connect(lambda index: self._animate_branch(index, False))
         self.model().modelAboutToBeReset.connect(self._clear_branch_animations)
@@ -599,6 +600,20 @@ class ProjectTree(QTreeWidget):
                 and self._branch_at(event.position().toPoint()).isValid()):
             self.mousePressEvent(event)
             return
+        index = self.indexAt(event.position().toPoint())
+        if index.isValid() and self.model().hasChildren(index):
+            item_rect = self.visualRect(index)
+            icon_rect = QRectF(item_rect.left() - 4, item_rect.top(), 20, item_rect.height())
+            if icon_rect.contains(event.position()):
+                self.setExpanded(index, not self.isExpanded(index))
+                event.accept()
+                return
+        if index.isValid():
+            # Opening a folder may refresh the model on the first click.
+            # Resolve the row again instead of relying on Qt's old press index.
+            self.itemDoubleClicked.emit(self.itemFromIndex(index), index.column())
+            event.accept()
+            return
         super().mouseDoubleClickEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -663,10 +678,14 @@ class ProjectTree(QTreeWidget):
             parent = parent.parent()
         ancestors.reverse()
         if ancestors:
-            painter.setPen(QPen(QColor(151, 154, 163, 52), 1,
-                                Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap,
-                                Qt.PenJoinStyle.RoundJoin))
             for level, branch_item in enumerate([*ancestors[1:], index]):
+                color_value = ancestors[level].data(Qt.ItemDataRole.UserRole + 5)
+                color = QColor(str(color_value)) if color_value else ui_color("#979aa3")
+                if not color.isValid():
+                    color = ui_color("#979aa3")
+                color.setAlpha(64)
+                painter.setPen(QPen(color, 1, Qt.PenStyle.SolidLine,
+                                    Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
                 guide_x = center_x - (len(ancestors) - 1 - level) * self.indentation()
                 tree_item = self.itemFromIndex(branch_item)
                 parent_item = tree_item.parent() if tree_item else None
@@ -674,10 +693,10 @@ class ProjectTree(QTreeWidget):
                 has_next = any(not (parent_item.child(i) if parent_item else
                                     self.topLevelItem(i)).isHidden()
                                for i in range(branch_item.row() + 1, sibling_count))
-                if level < len(ancestors) - 1:
+                if level < len(ancestors) - 1 and has_next:
                     painter.drawLine(QPointF(guide_x, rect.top()),
                                      QPointF(guide_x, rect.bottom() + 1))
-                elif not self.model().hasChildren(index):
+                elif level == len(ancestors) - 1 and not self.model().hasChildren(index):
                     if has_next:
                         painter.drawLine(QPointF(guide_x, rect.top()),
                                          QPointF(guide_x, rect.bottom() + 1))
@@ -708,7 +727,7 @@ class ProjectTree(QTreeWidget):
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
         painter.setPen(QPen(QColor(FOLDER_DROP_COLOR), 1))
-        painter.setBrush(ui_color("#2f8fe8"))
+        painter.setBrush(ui_color("#3297ff"))
         painter.drawRoundedRect(QRectF(0.5, 0.5, width - 1, 23), 4, 4)
         folder_tree_icon(False, True, str(item.data(0, Qt.ItemDataRole.UserRole + 4) or ""),
                          str(item.data(0, Qt.ItemDataRole.UserRole + 5) or ""), size=16).paint(
@@ -903,7 +922,7 @@ class ProjectListDelegate(QStyledItemDelegate):
         if not option.state & QStyle.StateFlag.State_Enabled:
             painter.setOpacity(0.4)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        rect = QRectF(option.rect).adjusted(-8, 1, -2, -1)
+        rect = QRectF(option.rect).adjusted(-8, 0, -2, -1)
         selected = bool(option.state & QStyle.StateFlag.State_Selected)
         tree = self.parent()
         dragging = tree._drop_target == index
@@ -929,16 +948,25 @@ class ProjectListDelegate(QStyledItemDelegate):
         opened = tree.model().hasChildren(index) and tree.isExpanded(index)
         highlighted = (selected or bool(option.state & QStyle.StateFlag.State_MouseOver)
                        or tree._hovered_folder == index)
-        folder_tree_icon(opened, highlighted, str(index.data(Qt.ItemDataRole.UserRole + 4) or ""),
-                         str(index.data(Qt.ItemDataRole.UserRole + 5) or "")).paint(
+        semantic_icon = index.data(Qt.ItemDataRole.UserRole + 7)
+        icon = (theme_icon(semantic_icon, 20) if semantic_icon else
+                folder_tree_icon(opened, highlighted, str(index.data(Qt.ItemDataRole.UserRole + 4) or ""),
+                                 str(index.data(Qt.ItemDataRole.UserRole + 5) or "")))
+        icon.paint(
             painter, int(icon_x), int(rect.center().y() - 10), 20, 20)
         name = str(index.data(Qt.ItemDataRole.DisplayRole) or "")
         count = index.data(Qt.ItemDataRole.UserRole + 2)
+        if tree.model().hasChildren(index) and not tree.isExpanded(index):
+            count = index.data(Qt.ItemDataRole.UserRole + 6)
         if not sidebar_counts(tree):
             count = None
         missing = bool(index.data(Qt.ItemDataRole.UserRole + 3))
         text_x = rect.left() + 30
-        text_width = max(20, rect.width() - (72 if count is not None or missing else 40))
+        count_text = "!" if missing else f"{count:,}" if count else ""
+        count_font = QFont(painter.font())
+        count_font.setPixelSize(11)
+        count_width = QFontMetrics(count_font).horizontalAdvance(count_text)
+        text_width = max(0, rect.right() - 10 - (count_width + 10 if count_text else 0) - text_x)
         font = painter.font()
         font.setPixelSize(13)
         font.setWeight(QFont.Weight.Normal)
@@ -973,7 +1001,7 @@ class ProjectListDelegate(QStyledItemDelegate):
         font.setPixelSize(11)
         painter.setFont(font)
         painter.setPen(ui_color("#ffd2d2") if missing else ui_color(QColor(255, 255, 255, 185)))
-        painter.drawText(QRectF(rect.right() - 39, rect.top(), 29, rect.height()),
+        painter.drawText(QRectF(rect.right() - 10 - count_width, rect.top(), count_width, rect.height()),
                          Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
-                         "!" if missing else str(count) if count is not None else "")
+                         count_text)
         painter.restore()
